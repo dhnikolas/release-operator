@@ -1,0 +1,36 @@
+name: scurity-operator
+
+probes:
+  enabled: true
+  rdn:
+    path: /health/ready
+    port: 8081
+    initialDelaySeconds: 20
+    periodSeconds: 15
+    timeoutSeconds: 2
+    successThreshold: 1
+    failureThreshold: 5
+  lvn:
+    path: /health/live
+    port: 8081
+    initialDelaySeconds: 20
+    periodSeconds: 15
+    timeoutSeconds: 2
+    successThreshold: 1
+    failureThreshold: 5
+
+containerPort: 9090
+serviceAccount: "release-operator-controller-manager"
+
+ingress:
+  enabled: false
+  annotations: {}
+  tls:
+    enabled: true
+  default_rule: false
+  rules: []
+
+monitoring:
+  enabled: true
+  port: 8081
+  path: /metrics

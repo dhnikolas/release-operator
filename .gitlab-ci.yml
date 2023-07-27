@@ -1,0 +1,5 @@
+---
+include:
+  - project: 'dis.cloud/cld-ci'
+    ref: master
+    file: 'pipeline.yml'
