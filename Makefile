@@ -233,3 +233,24 @@ catalog-build: opm ## Build a catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+TOOLS_DIR := hack/tools
+BIN_DIR := $(TOOLS_DIR)/bin
+GOLANGCI_LINT_VERSION := v1.51.1
+
+lint-install:
+	$(TOOLS_DIR)/ensure-golangci-lint.sh -b $(BIN_DIR) $(GOLANGCI_LINT_VERSION)
+
+.PHONY: lint-update
+lint-update: lint-install lint-update-run
+
+.PHONY: lint
+lint: lint-install lint-run
+
+.PHONY: lint-run
+lint-run:
+	$(BIN_DIR)/golangci-lint run -v --fast=false
+
+.PHONY: lint-update-run
+lint-update-run:
+	$(BIN_DIR)/golangci-lint run -v --fast=false --fix

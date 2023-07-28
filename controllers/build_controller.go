@@ -23,11 +23,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
 )
 
-// BuildReconciler reconciles a Build object
+// BuildReconciler reconciles a Build object.
 type BuildReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -49,8 +50,16 @@ type BuildReconciler struct {
 func (r *BuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	build := &releasev1alpha1.Build{}
+	err := r.Client.Get(ctx, req.NamespacedName, build)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	build.Status.Status = build.Spec.Status
 
+	if err := r.Update(ctx, build); err != nil {
+		return ctrl.Result{Requeue: true}, err
+	}
 	return ctrl.Result{}, nil
 }
 

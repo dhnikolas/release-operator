@@ -1,0 +1,33 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - builds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - builds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - builds/status
+  verbs:
+  - get
+  - patch
+  - update

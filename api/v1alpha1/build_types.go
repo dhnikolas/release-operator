@@ -23,25 +23,26 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// BuildSpec defines the desired state of Build
+// BuildSpec defines the desired state of Build.
 type BuildSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of Build. Edit build_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 
-// BuildStatus defines the observed state of Build
+// BuildStatus defines the observed state of Build.
 type BuildStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Status string `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// Build is the Schema for the builds API
+// Build is the Schema for the builds API.
 type Build struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -52,7 +53,7 @@ type Build struct {
 
 //+kubebuilder:object:root=true
 
-// BuildList contains a list of Build
+// BuildList contains a list of Build.
 type BuildList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
