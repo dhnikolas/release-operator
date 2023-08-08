@@ -1,6 +1,14 @@
 apiVersion: release.salt.x5.ru/v1alpha1
 kind: Build
 metadata:
-  name: build-sample
+  name: release-2023.08.07-1
 spec:
-  # TODO(user): Add fields here
+  repos:
+    - URL: https://scm.x5.ru/dis.cloud/core/capi-controller
+      branches:
+        - name: branch7
+        - name: branch80
+    - URL: https://scm.x5.ru/dis.cloud/core/os-diks-controller
+      branches:
+        - name: branch3
+        - name: branch2

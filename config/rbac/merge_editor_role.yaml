@@ -1,0 +1,24 @@
+# permissions for end users to edit merges.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: merge-editor-role
+rules:
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - merges
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - merges/status
+  verbs:
+  - get

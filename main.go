@@ -30,6 +30,7 @@ import (
 
 	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
 	"scm.x5.ru/dis.cloud/operators/release-operator/controllers"
+	"scm.x5.ru/dis.cloud/operators/release-operator/internal/app"
 )
 
 var (
@@ -60,6 +61,11 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	a, err := app.New()
+	if err != nil {
+		setupLog.Error(err, "unable to start app")
+		os.Exit(1)
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -88,8 +94,17 @@ func main() {
 	if err = (&controllers.BuildReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		App:    a,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Build")
+		os.Exit(1)
+	}
+	if err = (&controllers.MergeReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		App:    a,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Merge")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

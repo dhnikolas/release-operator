@@ -22,24 +22,24 @@ import (
 )
 
 const (
-	BuildFinalizer = "build.release.salt.x5.ru/finalizer"
+	MergeFinalizer = "merge.release.salt.x5.ru/finalizer"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// BuildSpec defines the desired state of Build.
-type BuildSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// Repos repositories where need merge branches
-	Repos []Repo `json:"repos,omitempty"`
+// MergeSpec defines the desired state of Merge.
+type MergeSpec struct {
+	Repo Repo `json:"repo"`
 }
 
-// BuildStatus defines the observed state of Build.
-type BuildStatus struct {
-	BuildReady     bool    `json:"buildReady"`
-	FailureMessage *string `json:"failureMessage,omitempty"`
+// MergeStatus defines the observed state of Merge.
+type MergeStatus struct {
+	URL                   string         `json:"URL"`
+	BuildBranch           string         `json:"buildBranch"`
+	ResolveConflictBranch string         `json:"resolveConflictBranch"`
+	Branches              []BranchStatus `json:"branches,omitempty"`
+	FailureMessage        *string        `json:"failureMessage,omitempty"`
 
 	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
 }
@@ -47,34 +47,24 @@ type BuildStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// Build is the Schema for the builds API.
-type Build struct {
+// Merge is the Schema for the merges API.
+type Merge struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BuildSpec   `json:"spec,omitempty"`
-	Status BuildStatus `json:"status,omitempty"`
+	Spec   MergeSpec   `json:"spec,omitempty"`
+	Status MergeStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// BuildList contains a list of Build.
-type BuildList struct {
+// MergeList contains a list of Merge.
+type MergeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Build `json:"items"`
-}
-
-// GetConditions returns the set of conditions for this object.
-func (in *Build) GetConditions() clusterv1.Conditions {
-	return in.Status.Conditions
-}
-
-// SetConditions sets the conditions on this object.
-func (in *Build) SetConditions(conditions clusterv1.Conditions) {
-	in.Status.Conditions = conditions
+	Items           []Merge `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Build{}, &BuildList{})
+	SchemeBuilder.Register(&Merge{}, &MergeList{})
 }

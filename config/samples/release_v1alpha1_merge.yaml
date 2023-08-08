@@ -1,0 +1,6 @@
+apiVersion: release.salt.x5.ru/v1alpha1
+kind: Merge
+metadata:
+  name: merge-sample
+spec:
+  # TODO(user): Add fields here

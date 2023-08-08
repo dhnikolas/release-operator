@@ -31,3 +31,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - merges
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - merges/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - merges/status
+  verbs:
+  - get
+  - patch
+  - update

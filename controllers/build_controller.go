@@ -18,20 +18,30 @@ package controllers
 
 import (
 	"context"
+	"path"
 
+	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/cluster-api/util/conditions"
+	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
+	"scm.x5.ru/dis.cloud/operators/release-operator/internal/app"
 )
 
 // BuildReconciler reconciles a Build object.
 type BuildReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	App    *app.App
 }
 
 //+kubebuilder:rbac:groups=release.salt.x5.ru,resources=builds,verbs=get;list;watch;create;update;patch;delete
@@ -47,20 +57,208 @@ type BuildReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
-func (r *BuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+func (r *BuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
+	logger := log.FromContext(ctx)
+
+	logger.Info("Start reconcile Build")
 
 	build := &releasev1alpha1.Build{}
 	err := r.Client.Get(ctx, req.NamespacedName, build)
 	if err != nil {
-		return reconcile.Result{}, err
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{Requeue: true}, err
 	}
-	build.Status.Status = build.Spec.Status
 
-	if err := r.Update(ctx, build); err != nil {
+	patchHelper, err := patch.NewHelper(build, r.Client)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	// Always patch the openStackCluster when exiting this function so we can persist any OpenStackCluster changes.
+	defer func() {
+		if err := patchBuild(ctx, patchHelper, build); err != nil {
+			if reterr == nil {
+				reterr = errors.Wrapf(err, "error patching Build %s/%s", build.Namespace, build.Name)
+			}
+		}
+	}()
+
+	if !build.GetDeletionTimestamp().IsZero() {
+		return r.reconcileDelete(ctx, build)
+	}
+
+	return r.reconcileNormal(ctx, build)
+}
+
+func (r *BuildReconciler) reconcileNormal(ctx context.Context, build *releasev1alpha1.Build) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	if controllerutil.AddFinalizer(build, releasev1alpha1.BuildFinalizer) {
+		logger.Info("Finalizer not add")
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	labelSelector := &v1.LabelSelector{}
+	labelSelector.MatchLabels = map[string]string{}
+	labelSelector.MatchLabels[releasev1alpha1.BuildNameLabel] = build.Name
+	allMerges := &releasev1alpha1.MergeList{}
+	err := r.Client.List(ctx,
+		allMerges,
+		client.InNamespace(build.Namespace),
+		client.MatchingLabels(labelSelector.MatchLabels),
+	)
+	if err != nil {
+		logger.Error(err, "Cannot get MergeList")
 		return ctrl.Result{Requeue: true}, err
 	}
-	return ctrl.Result{}, nil
+
+	toCreate, remove, toUpdate := getFullReposDiff(build.Spec.Repos, allMerges)
+
+	if len(toCreate) > 0 {
+		for _, repo := range toCreate {
+			newMerge := &releasev1alpha1.Merge{
+				Spec: releasev1alpha1.MergeSpec{Repo: repo},
+			}
+			newMerge.Namespace = build.Namespace
+			newMerge.Labels = map[string]string{}
+			newMerge.Labels[releasev1alpha1.BuildNameLabel] = build.Name
+			newMerge.Name = mergeName(build.Name, repo.URL)
+			err := r.Client.Create(ctx, newMerge)
+			if err != nil {
+				logger.Error(err, "Cannot create Merge")
+				return ctrl.Result{Requeue: true}, err
+			}
+		}
+	}
+
+	if len(remove) > 0 {
+		for _, toDelete := range remove {
+			mergeToDelete := &releasev1alpha1.Merge{}
+			mergeToDelete.Name = mergeName(build.Name, toDelete)
+			mergeToDelete.Namespace = build.Namespace
+			err := r.Client.Delete(ctx, mergeToDelete)
+			if err != nil {
+				logger.Error(err, "Cannot delete Merge")
+				return ctrl.Result{Requeue: true}, err
+			}
+		}
+	}
+
+	mergePatchHelper, err := patch.NewHelper(&releasev1alpha1.Merge{}, r.Client)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if len(toUpdate) > 0 {
+		for _, update := range toUpdate {
+			mergeToUpdate := &releasev1alpha1.Merge{}
+			mergeToUpdate.Spec.Repo = update
+			mergeToUpdate.Name = mergeName(build.Name, update.URL)
+			mergeToUpdate.Namespace = build.Namespace
+			err := mergePatchHelper.Patch(ctx, mergeToUpdate)
+			if err != nil {
+				logger.Error(err, "Cannot update Merge")
+				return ctrl.Result{Requeue: true}, err
+			}
+		}
+	}
+
+	logger.Info("Reconcile Build success")
+
+	return reconcile.Result{}, nil
+}
+
+func getFullReposDiff(
+	currentRepos []releasev1alpha1.Repo,
+	mergeList *releasev1alpha1.MergeList,
+) ([]releasev1alpha1.Repo, []string, []releasev1alpha1.Repo) {
+	currentReposMap := map[string]releasev1alpha1.Repo{}
+	currentReposSlice := make([]string, 0, len(currentRepos))
+	for _, repo := range currentRepos {
+		currentReposMap[repo.URL] = repo
+		currentReposSlice = append(currentReposSlice, repo.URL)
+	}
+
+	mergeListMap := map[string]releasev1alpha1.Merge{}
+	currentListSlice := make([]string, 0, len(mergeList.Items))
+	for _, item := range mergeList.Items {
+		mergeListMap[item.Spec.Repo.URL] = item
+		currentListSlice = append(currentListSlice, item.Spec.Repo.URL)
+	}
+
+	add, remove, intersection := FullDiff(currentReposSlice, currentListSlice)
+
+	toCreate := make([]releasev1alpha1.Repo, 0)
+	for _, s := range add {
+		toCreate = append(toCreate, currentReposMap[s])
+	}
+
+	toUpdate := make([]releasev1alpha1.Repo, 0)
+	for _, s := range intersection {
+		if !currentReposMap[s].Equal(mergeListMap[s].Spec.Repo) {
+			toUpdate = append(toUpdate, currentReposMap[s])
+		}
+	}
+
+	return toCreate, remove, toUpdate
+}
+
+func Diff(slice1, slice2 []string) ([]string, []string) {
+	m := make(map[string]bool)
+	for _, v := range slice1 {
+		m[v] = true
+	}
+	result := make([]string, 0)
+	same := make([]string, 0)
+	for _, v := range slice2 {
+		if !m[v] {
+			result = append(result, v)
+		} else {
+			same = append(same, v)
+		}
+	}
+
+	return result, same
+}
+
+func FullDiff(slice1, slice2 []string) ([]string, []string, []string) {
+	resultTo, intersection := Diff(slice1, slice2)
+	resultFrom, _ := Diff(slice2, slice1)
+	return resultFrom, resultTo, intersection
+}
+
+func mergeName(buildName, repoURL string) string {
+	repoName := path.Base(repoURL)
+	return buildName + "-" + repoName
+}
+
+func (r *BuildReconciler) reconcileDelete(ctx context.Context, build *releasev1alpha1.Build) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconcileDelete")
+
+	controllerutil.RemoveFinalizer(build, releasev1alpha1.BuildFinalizer)
+	logger.Info("Remove Finalizer")
+	return reconcile.Result{}, nil
+}
+
+func patchBuild(ctx context.Context, patchHelper *patch.Helper, build *releasev1alpha1.Build, options ...patch.Option) error {
+	// Always update the readyCondition by summarizing the state of other conditions.
+	applicableConditions := []clusterv1.ConditionType{
+		releasev1alpha1.BuildReadyCondition,
+	}
+
+	conditions.SetSummary(build,
+		conditions.WithConditions(applicableConditions...),
+	)
+	// Patch the object, ignoring conflicts on the conditions owned by this controller.
+	// Also, if requested, we are adding additional options like e.g. Patch ObservedGeneration when issuing the
+	// patch at the end of the reconcile loop.
+	options = append(options,
+		patch.WithOwnedConditions{
+			Conditions: []clusterv1.ConditionType{},
+		},
+	)
+	return patchHelper.Patch(ctx, build, options...)
 }
 
 // SetupWithManager sets up the controller with the Manager.

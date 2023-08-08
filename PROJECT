@@ -16,4 +16,13 @@ resources:
   kind: Build
   path: scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: salt.x5.ru
+  group: release
+  kind: Merge
+  path: scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

@@ -5,20 +5,20 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.2
   creationTimestamp: null
-  name: builds.release.salt.x5.ru
+  name: merges.release.salt.x5.ru
 spec:
   group: release.salt.x5.ru
   names:
-    kind: Build
-    listKind: BuildList
-    plural: builds
-    singular: build
+    kind: Merge
+    listKind: MergeList
+    plural: merges
+    singular: merge
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Build is the Schema for the builds API.
+        description: Merge is the Schema for the merges API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -33,37 +33,50 @@ spec:
           metadata:
             type: object
           spec:
-            description: BuildSpec defines the desired state of Build.
+            description: MergeSpec defines the desired state of Merge
             properties:
-              repos:
-                description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
-                  Repos repositories where need merge branches'
-                items:
-                  properties:
-                    URL:
-                      pattern: ^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})\/([\/\w\.-]){1,}\/?$
-                      type: string
-                    branches:
-                      items:
-                        properties:
-                          name:
-                            type: string
-                        required:
-                        - name
-                        type: object
-                      type: array
-                  required:
-                  - URL
-                  - branches
-                  type: object
-                type: array
+              repo:
+                properties:
+                  URL:
+                    pattern: ^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})\/([\/\w\.-]){1,}\/?$
+                    type: string
+                  branches:
+                    items:
+                      properties:
+                        name:
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                required:
+                - URL
+                - branches
+                type: object
+            required:
+            - repo
             type: object
           status:
-            description: BuildStatus defines the observed state of Build.
+            description: MergeStatus defines the observed state of Merge
             properties:
-              buildReady:
-                type: boolean
+              URL:
+                type: string
+              branches:
+                items:
+                  properties:
+                    failureMessage:
+                      type: string
+                    isMerged:
+                      type: boolean
+                    name:
+                      type: string
+                  required:
+                  - isMerged
+                  - name
+                  type: object
+                type: array
+              buildBranch:
+                type: string
               conditions:
                 description: Conditions provide observations of the operational state
                   of a Cluster API resource.
@@ -112,8 +125,12 @@ spec:
                 type: array
               failureMessage:
                 type: string
+              resolveConflictBranch:
+                type: string
             required:
-            - buildReady
+            - URL
+            - buildBranch
+            - resolveConflictBranch
             type: object
         type: object
     served: true
