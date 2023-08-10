@@ -38,7 +38,7 @@ type BuildSpec struct {
 
 // BuildStatus defines the observed state of Build.
 type BuildStatus struct {
-	BuildReady     bool    `json:"buildReady"`
+	BuildReady     bool    `json:"buildReady,omitempty"`
 	FailureMessage *string `json:"failureMessage,omitempty"`
 
 	Conditions clusterv1.Conditions `json:"conditions,omitempty"`

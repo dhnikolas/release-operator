@@ -18,7 +18,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Merge is the Schema for the merges API
+        description: Merge is the Schema for the merges API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -33,7 +33,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: MergeSpec defines the desired state of Merge
+            description: MergeSpec defines the desired state of Merge.
             properties:
               repo:
                 properties:
@@ -57,7 +57,7 @@ spec:
             - repo
             type: object
           status:
-            description: MergeStatus defines the observed state of Merge
+            description: MergeStatus defines the observed state of Merge.
             properties:
               URL:
                 type: string

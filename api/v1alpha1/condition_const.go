@@ -3,7 +3,12 @@ package v1alpha1
 import "sigs.k8s.io/cluster-api/api/v1beta1"
 
 const (
-	BuildReadyCondition                   v1beta1.ConditionType = "BuildReady"
+	BuildReadyCondition  v1beta1.ConditionType = "BuildReady"
+	BuildSyncedCondition v1beta1.ConditionType = "BuildSyncedReady"
+	NotSyncedReason                            = "NotSynced"
+
+	MergesNotReadyReason = "MergesNotReady"
+
 	RepositoriesReadyCondition            v1beta1.ConditionType = "RepositoriesReady"
 	ReleaseBranchReadyCondition           v1beta1.ConditionType = "ReleaseBranchReady"
 	AllBranchMergedCondition              v1beta1.ConditionType = "AllBranchMerged"

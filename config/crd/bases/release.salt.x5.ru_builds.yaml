@@ -112,8 +112,6 @@ spec:
                 type: array
               failureMessage:
                 type: string
-            required:
-            - buildReady
             type: object
         type: object
     served: true

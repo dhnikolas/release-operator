@@ -35,6 +35,10 @@ import (
 
 	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
 	"scm.x5.ru/dis.cloud/operators/release-operator/internal/app"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 // BuildReconciler reconciles a Build object.
@@ -84,34 +88,41 @@ func (r *BuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ct
 		}
 	}()
 
-	if !build.GetDeletionTimestamp().IsZero() {
-		return r.reconcileDelete(ctx, build)
-	}
-
-	return r.reconcileNormal(ctx, build)
-}
-
-func (r *BuildReconciler) reconcileNormal(ctx context.Context, build *releasev1alpha1.Build) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	if controllerutil.AddFinalizer(build, releasev1alpha1.BuildFinalizer) {
-		logger.Info("Finalizer not add")
-		return reconcile.Result{Requeue: true}, nil
-	}
-
 	labelSelector := &v1.LabelSelector{}
 	labelSelector.MatchLabels = map[string]string{}
 	labelSelector.MatchLabels[releasev1alpha1.BuildNameLabel] = build.Name
 	allMerges := &releasev1alpha1.MergeList{}
-	err := r.Client.List(ctx,
+	err = r.Client.List(ctx,
 		allMerges,
 		client.InNamespace(build.Namespace),
 		client.MatchingLabels(labelSelector.MatchLabels),
 	)
 	if err != nil {
-		logger.Error(err, "Cannot get MergeList")
+		conditions.MarkFalse(build,
+			releasev1alpha1.BuildSyncedCondition,
+			releasev1alpha1.NotSyncedReason,
+			clusterv1.ConditionSeverityError,
+			"Cannot get MergeList")
 		return ctrl.Result{Requeue: true}, err
 	}
 
+	if !build.GetDeletionTimestamp().IsZero() {
+		return r.reconcileDelete(ctx, build, allMerges)
+	}
+
+	return r.reconcileNormal(ctx, build, allMerges)
+}
+
+func (r *BuildReconciler) reconcileNormal(ctx context.Context, build *releasev1alpha1.Build, allMerges *releasev1alpha1.MergeList) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	if !controllerutil.ContainsFinalizer(build, releasev1alpha1.BuildFinalizer) {
+		if controllerutil.AddFinalizer(build, releasev1alpha1.BuildFinalizer) {
+			logger.Info("Finalizer not add")
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
+
+	logger.Info("Reconcile normal ")
 	toCreate, remove, toUpdate := getFullReposDiff(build.Spec.Repos, allMerges)
 
 	if len(toCreate) > 0 {
@@ -123,9 +134,17 @@ func (r *BuildReconciler) reconcileNormal(ctx context.Context, build *releasev1a
 			newMerge.Labels = map[string]string{}
 			newMerge.Labels[releasev1alpha1.BuildNameLabel] = build.Name
 			newMerge.Name = mergeName(build.Name, repo.URL)
-			err := r.Client.Create(ctx, newMerge)
+			err := controllerutil.SetControllerReference(build, newMerge, r.Scheme)
 			if err != nil {
-				logger.Error(err, "Cannot create Merge")
+				logger.Error(err, "Ref error ")
+			}
+			err = r.Client.Create(ctx, newMerge)
+			if err != nil {
+				conditions.MarkFalse(build,
+					releasev1alpha1.BuildSyncedCondition,
+					releasev1alpha1.NotSyncedReason,
+					clusterv1.ConditionSeverityError,
+					"Cannot create Merge")
 				return ctrl.Result{Requeue: true}, err
 			}
 		}
@@ -138,7 +157,11 @@ func (r *BuildReconciler) reconcileNormal(ctx context.Context, build *releasev1a
 			mergeToDelete.Namespace = build.Namespace
 			err := r.Client.Delete(ctx, mergeToDelete)
 			if err != nil {
-				logger.Error(err, "Cannot delete Merge")
+				conditions.MarkFalse(build,
+					releasev1alpha1.BuildSyncedCondition,
+					releasev1alpha1.NotSyncedReason,
+					clusterv1.ConditionSeverityError,
+					"Cannot delete Merge")
 				return ctrl.Result{Requeue: true}, err
 			}
 		}
@@ -157,15 +180,63 @@ func (r *BuildReconciler) reconcileNormal(ctx context.Context, build *releasev1a
 			mergeToUpdate.Namespace = build.Namespace
 			err := mergePatchHelper.Patch(ctx, mergeToUpdate)
 			if err != nil {
-				logger.Error(err, "Cannot update Merge")
+				conditions.MarkFalse(build,
+					releasev1alpha1.BuildSyncedCondition,
+					releasev1alpha1.NotSyncedReason,
+					clusterv1.ConditionSeverityError,
+					"Cannot update Merge")
 				return ctrl.Result{Requeue: true}, err
 			}
 		}
 	}
 
+	conditions.MarkTrue(build, releasev1alpha1.BuildSyncedCondition)
+
+	for i := range allMerges.Items {
+		if !conditions.IsTrue(&allMerges.Items[i], clusterv1.ReadyCondition) {
+			conditions.MarkFalse(build,
+				releasev1alpha1.BuildReadyCondition,
+				releasev1alpha1.MergesNotReadyReason,
+				clusterv1.ConditionSeverityInfo,
+				"Merges is not ready yet")
+			return ctrl.Result{}, nil
+		}
+	}
+
+	conditions.MarkTrue(build, releasev1alpha1.BuildReadyCondition)
 	logger.Info("Reconcile Build success")
 
 	return reconcile.Result{}, nil
+}
+
+func (r *BuildReconciler) reconcileDelete(ctx context.Context, build *releasev1alpha1.Build, allMerges *releasev1alpha1.MergeList) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconcileDelete")
+
+	controllerutil.RemoveFinalizer(build, releasev1alpha1.BuildFinalizer)
+	logger.Info("Remove Finalizer")
+	return reconcile.Result{}, nil
+}
+
+func patchBuild(ctx context.Context, patchHelper *patch.Helper, build *releasev1alpha1.Build, options ...patch.Option) error {
+	// Always update the readyCondition by summarizing the state of other conditions.
+	applicableConditions := []clusterv1.ConditionType{
+		releasev1alpha1.BuildReadyCondition,
+		releasev1alpha1.BuildSyncedCondition,
+	}
+
+	conditions.SetSummary(build,
+		conditions.WithConditions(applicableConditions...),
+	)
+	// Patch the object, ignoring conflicts on the conditions owned by this controller.
+	// Also, if requested, we are adding additional options like e.g. Patch ObservedGeneration when issuing the
+	// patch at the end of the reconcile loop.
+	options = append(options,
+		patch.WithOwnedConditions{
+			Conditions: []clusterv1.ConditionType{},
+		},
+	)
+	return patchHelper.Patch(ctx, build, options...)
 }
 
 func getFullReposDiff(
@@ -232,38 +303,45 @@ func mergeName(buildName, repoURL string) string {
 	return buildName + "-" + repoName
 }
 
-func (r *BuildReconciler) reconcileDelete(ctx context.Context, build *releasev1alpha1.Build) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	logger.Info("reconcileDelete")
-
-	controllerutil.RemoveFinalizer(build, releasev1alpha1.BuildFinalizer)
-	logger.Info("Remove Finalizer")
-	return reconcile.Result{}, nil
-}
-
-func patchBuild(ctx context.Context, patchHelper *patch.Helper, build *releasev1alpha1.Build, options ...patch.Option) error {
-	// Always update the readyCondition by summarizing the state of other conditions.
-	applicableConditions := []clusterv1.ConditionType{
-		releasev1alpha1.BuildReadyCondition,
+func (r *BuildReconciler) MergeToBuildMapFunc(ctx context.Context, o client.Object) []ctrl.Request {
+	result := make([]ctrl.Request, 0, 1)
+	m, ok := o.(*releasev1alpha1.Merge)
+	if !ok {
+		return result
 	}
 
-	conditions.SetSummary(build,
-		conditions.WithConditions(applicableConditions...),
-	)
-	// Patch the object, ignoring conflicts on the conditions owned by this controller.
-	// Also, if requested, we are adding additional options like e.g. Patch ObservedGeneration when issuing the
-	// patch at the end of the reconcile loop.
-	options = append(options,
-		patch.WithOwnedConditions{
-			Conditions: []clusterv1.ConditionType{},
-		},
-	)
-	return patchHelper.Patch(ctx, build, options...)
+	owners := m.GetOwnerReferences()
+	if len(owners) > 0 && owners[0].Kind == "Build" {
+		name := client.ObjectKey{Namespace: m.Namespace, Name: owners[0].Name}
+		result = append(result, ctrl.Request{NamespacedName: name})
+	}
+	return result
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *BuildReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&releasev1alpha1.Build{}).
-		Complete(r)
+	_, err := ctrl.NewControllerManagedBy(mgr).
+		For(&releasev1alpha1.Build{}).Watches(&releasev1alpha1.Merge{},
+		handler.EnqueueRequestsFromMapFunc(r.MergeToBuildMapFunc),
+		builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(event event.CreateEvent) bool {
+				return false
+			},
+			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
+				return true
+			},
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				return true
+			},
+			GenericFunc: func(genericEvent event.GenericEvent) bool {
+				return false
+			},
+		})).
+		Build(r)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

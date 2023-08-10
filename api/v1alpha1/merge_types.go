@@ -65,6 +65,16 @@ type MergeList struct {
 	Items           []Merge `json:"items"`
 }
 
+// GetConditions returns the set of conditions for this object.
+func (in *Merge) GetConditions() clusterv1.Conditions {
+	return in.Status.Conditions
+}
+
+// SetConditions sets the conditions on this object.
+func (in *Merge) SetConditions(conditions clusterv1.Conditions) {
+	in.Status.Conditions = conditions
+}
+
 func init() {
 	SchemeBuilder.Register(&Merge{}, &MergeList{})
 }
