@@ -26,6 +26,18 @@ import (
 
 	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
 	"scm.x5.ru/dis.cloud/operators/release-operator/internal/app"
+	"sigs.k8s.io/cluster-api/util/patch"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/cluster-api/util/conditions"
+	"github.com/pkg/errors"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"net/url"
+	"time"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"strings"
+	"fmt"
+	"github.com/xanzy/go-gitlab"
 )
 
 // MergeReconciler reconciles a Merge object.
@@ -48,14 +60,204 @@ type MergeReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
-func (r *MergeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *MergeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	logger := log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	logger.Info("Reconcile Merge " + req.Name)
 
-	logger.Info("Reconcile Merge" + req.Name)
+	merge := &releasev1alpha1.Merge{}
+	err := r.Client.Get(ctx, req.NamespacedName, merge)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{Requeue: true}, err
+	}
+	patchHelper, err := patch.NewHelper(merge, r.Client)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
-	return ctrl.Result{}, nil
+	defer func() {
+		if err := patchMerge(ctx, patchHelper, merge); err != nil {
+			if reterr == nil {
+				reterr = errors.Wrapf(err, "error patching Build %s/%s", merge.Namespace, merge.Name)
+			}
+			logger.Error(err, "Patch Merge error")
+		}
+	}()
+
+	if !merge.GetDeletionTimestamp().IsZero() {
+		return r.reconcileDelete(ctx, merge)
+	}
+
+	return r.reconcileNormal(ctx, merge)
+}
+
+func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1alpha1.Merge) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	if !controllerutil.ContainsFinalizer(merge, releasev1alpha1.MergeFinalizer) {
+		if controllerutil.AddFinalizer(merge, releasev1alpha1.MergeFinalizer) {
+			logger.Info("Finalizer not add %s", releasev1alpha1.MergeFinalizer)
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
+
+	projectURL, err := url.Parse(merge.Spec.Repo.URL)
+	if err != nil {
+		conditions.MarkFalse(merge, releasev1alpha1.RepositoriesReadyCondition, releasev1alpha1.RepositoriesReason,
+			clusterv1.ConditionSeverityError,
+			"Cannot parse repo URL %s", merge.Spec.Repo.URL)
+		return ctrl.Result{}, err
+	}
+	projectPID := strings.Trim(projectURL.Path, "/")
+
+	if projectPID == "" {
+		conditions.MarkFalse(merge, releasev1alpha1.RepositoriesReadyCondition, releasev1alpha1.RepositoriesReason,
+			clusterv1.ConditionSeverityError,
+			"Wrong projectPID %s", projectPID)
+		return ctrl.Result{}, err
+	}
+	_, projectExits, err := r.App.GitClient.GetProject(projectPID)
+	if err != nil {
+		conditions.MarkFalse(merge, releasev1alpha1.RepositoriesReadyCondition, releasev1alpha1.RepositoriesReason,
+			clusterv1.ConditionSeverityError,
+			"Error get project by URL %s %s", merge.Spec.Repo.URL, err)
+		return ctrl.Result{RequeueAfter: time.Second * 15}, err
+	}
+	if !projectExits {
+		conditions.MarkFalse(merge, releasev1alpha1.RepositoriesReadyCondition, releasev1alpha1.RepositoriesReason,
+			clusterv1.ConditionSeverityError,
+			"Error Project not exit %s ", merge.Spec.Repo.URL)
+		return ctrl.Result{}, fmt.Errorf("Project not exit %s ", merge.Spec.Repo.URL)
+	}
+	conditions.MarkTrue(merge, releasev1alpha1.RepositoriesReadyCondition)
+	buildName := merge.Labels[releasev1alpha1.BuildNameLabel]
+
+	branches := getBranchesNames(merge.Spec.Repo.Branches)
+	statusBranches := getStatusBranchesNames(merge.Status.Branches)
+	add, remove, _ := FullDiff(branches, statusBranches)
+
+	if len(remove) > 0 {
+		err = r.App.GitClient.RemoveBranch(projectPID, buildName)
+		if err != nil {
+			conditions.MarkFalse(merge, releasev1alpha1.ReleaseBranchReadyCondition, releasev1alpha1.ReleaseBranchReason,
+				clusterv1.ConditionSeverityError,
+				"Recreate branch error: URL %s %s", merge.Spec.Repo.URL, err)
+			return ctrl.Result{Requeue: true}, err
+		}
+		merge.Status.BuildBranch = buildName
+		add = branches
+		merge.Status.Branches = make([]releasev1alpha1.BranchStatus, 0, 0)
+		merge.Status.ResolveConflictBranch = ""
+	}
+
+	err = r.App.GitClient.GetOrCreateBranch(projectPID, buildName)
+	if err != nil {
+		conditions.MarkFalse(merge, releasev1alpha1.ReleaseBranchReadyCondition, releasev1alpha1.ReleaseBranchReason,
+			clusterv1.ConditionSeverityError,
+			"Get or create branch error: URL %s %s", merge.Spec.Repo.URL, err)
+		return ctrl.Result{Requeue: true}, err
+	}
+	merge.Status.BuildBranch = buildName
+	conditions.MarkTrue(merge, releasev1alpha1.ReleaseBranchReadyCondition)
+
+	processMRs := make([]*gitlab.MergeRequest, 0, len(add))
+	for _, b := range add {
+		mr, err := r.App.GitClient.GetOrCreateMR(projectPID, b, buildName)
+		if err != nil {
+			conditions.MarkFalse(merge, releasev1alpha1.AllBranchMergedCondition, releasev1alpha1.AllBranchMergedReason,
+				clusterv1.ConditionSeverityWarning,
+				"GetOrCreate MR Error: %s %s %s", b, buildName, err)
+			return ctrl.Result{Requeue: true}, err
+		}
+		processMRs = append(processMRs, mr)
+	}
+
+	mergedCount := 0
+	hasConflict := false
+	for _, mr := range processMRs {
+		switch mr.MergeStatus {
+		case "can_be_merged":
+			err := r.App.GitClient.AcceptMR(projectPID, mr.IID)
+			if err != nil {
+				conditions.MarkFalse(merge, releasev1alpha1.AllBranchMergedCondition, releasev1alpha1.AllBranchMergedReason,
+					clusterv1.ConditionSeverityWarning,
+					"AcceptMR MR Error: %s %s %s %s", projectPID, buildName, mr.SourceBranch, err)
+				return ctrl.Result{Requeue: true}, err
+			}
+			merge.Status.Branches = append(merge.Status.Branches, releasev1alpha1.BranchStatus{
+				Name:     mr.SourceBranch,
+				IsMerged: true,
+			})
+			mergedCount++
+		case "cannot_be_merged":
+			hasConflict = true
+		}
+	}
+
+	if hasConflict {
+
+	}
+
+	if mergedCount != len(add) {
+		return reconcile.Result{RequeueAfter: time.Second * 3}, nil
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func getBranchesNames(branches []releasev1alpha1.Branch) []string {
+	result := make([]string, 0, len(branches))
+	for _, branch := range branches {
+		result = append(result, branch.Name)
+	}
+	return result
+}
+
+func getStatusBranchesNames(branches []releasev1alpha1.BranchStatus) []string {
+	result := make([]string, 0, len(branches))
+	for _, branch := range branches {
+		result = append(result, branch.Name)
+	}
+	return result
+}
+
+func (r *MergeReconciler) reconcileDelete(ctx context.Context, merge *releasev1alpha1.Merge) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconcileDelete")
+
+	controllerutil.RemoveFinalizer(merge, releasev1alpha1.MergeFinalizer)
+	logger.Info("Remove Finalizer")
+	return reconcile.Result{}, nil
+}
+
+func patchMerge(ctx context.Context, patchHelper *patch.Helper, merge *releasev1alpha1.Merge, options ...patch.Option) error {
+	// Always update the readyCondition by summarizing the state of other conditions.
+	applicableConditions := []clusterv1.ConditionType{
+		releasev1alpha1.RepositoriesReadyCondition,
+		releasev1alpha1.ReleaseBranchReadyCondition,
+		releasev1alpha1.AllBranchesExistCondition,
+		releasev1alpha1.AllBranchMergedCondition,
+	}
+
+	if merge.Status.ResolveConflictBranch != "" {
+		applicableConditions = append(applicableConditions, releasev1alpha1.ResolveConflictBranchesReadyCondition)
+	}
+
+	conditions.SetSummary(merge,
+		conditions.WithConditions(applicableConditions...),
+	)
+	// Patch the object, ignoring conflicts on the conditions owned by this controller.
+	// Also, if requested, we are adding additional options like e.g. Patch ObservedGeneration when issuing the
+	// patch at the end of the reconcile loop.
+	options = append(options,
+		patch.WithOwnedConditions{
+			Conditions: []clusterv1.ConditionType{},
+		},
+	)
+
+	return patchHelper.Patch(ctx, merge, options...)
 }
 
 // SetupWithManager sets up the controller with the Manager.

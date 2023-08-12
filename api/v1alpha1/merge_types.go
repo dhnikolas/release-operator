@@ -35,9 +35,9 @@ type MergeSpec struct {
 
 // MergeStatus defines the observed state of Merge.
 type MergeStatus struct {
-	URL                   string         `json:"URL"`
-	BuildBranch           string         `json:"buildBranch"`
-	ResolveConflictBranch string         `json:"resolveConflictBranch"`
+	URL                   string         `json:"URL,omitempty"`
+	BuildBranch           string         `json:"buildBranch,omitempty"`
+	ResolveConflictBranch string         `json:"resolveConflictBranch,omitempty"`
 	Branches              []BranchStatus `json:"branches,omitempty"`
 	FailureMessage        *string        `json:"failureMessage,omitempty"`
 

@@ -46,7 +46,7 @@ type RepoStatus struct {
 }
 
 type BranchStatus struct {
-	Name           string  `json:"name"`
-	IsMerged       bool    `json:"isMerged"`
+	Name           string  `json:"name,omitempty"`
+	IsMerged       bool    `json:"isMerged,omitempty"`
 	FailureMessage *string `json:"failureMessage,omitempty"`
 }

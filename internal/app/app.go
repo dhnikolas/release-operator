@@ -1,8 +1,6 @@
 package app
 
 import (
-	"github.com/xanzy/go-gitlab"
-
 	"scm.x5.ru/dis.cloud/go-pkgs/configurator"
 	"scm.x5.ru/dis.cloud/go-pkgs/configurator/sources/consul"
 	"scm.x5.ru/dis.cloud/go-pkgs/configurator/sources/vault"
@@ -12,8 +10,8 @@ import (
 )
 
 type App struct {
-	GitlabClient *gitlab.Client
-	Config       *Config
+	GitClient *gitclient.Client
+	Config    *Config
 }
 
 type Config struct {
@@ -49,8 +47,8 @@ func New() (*App, error) {
 	}
 
 	app := &App{
-		GitlabClient: gitlabClient,
-		Config:       &config,
+		GitClient: gitlabClient,
+		Config:    &config,
 	}
 
 	return app, nil

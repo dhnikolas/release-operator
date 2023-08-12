@@ -79,12 +79,12 @@ func (r *BuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ct
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	// Always patch the openStackCluster when exiting this function so we can persist any OpenStackCluster changes.
 	defer func() {
 		if err := patchBuild(ctx, patchHelper, build); err != nil {
 			if reterr == nil {
 				reterr = errors.Wrapf(err, "error patching Build %s/%s", build.Namespace, build.Name)
 			}
+			logger.Error(err, "Patch Build error")
 		}
 	}()
 

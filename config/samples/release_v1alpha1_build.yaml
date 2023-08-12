@@ -4,11 +4,7 @@ metadata:
   name: release-2023.08.07-1
 spec:
   repos:
-    - URL: https://scm.x5.ru/dis.cloud/core/capi-controller
+    - URL: https://scm.x5.ru/salt-public/common
       branches:
-        - name: branch7
-        - name: branch80
-    - URL: https://scm.x5.ru/dis.cloud/core/os-diks-controller
-      branches:
-        - name: branch3
-        - name: branch2
+        - name: CLDCORE-5051
+        - name: branch1

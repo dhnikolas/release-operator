@@ -9,8 +9,13 @@ const (
 
 	MergesNotReadyReason = "MergesNotReady"
 
-	RepositoriesReadyCondition            v1beta1.ConditionType = "RepositoriesReady"
+	RepositoriesReadyCondition v1beta1.ConditionType = "RepositoriesReady"
+	RepositoriesReason                               = "WrongRepository"
+
 	ReleaseBranchReadyCondition           v1beta1.ConditionType = "ReleaseBranchReady"
+	ReleaseBranchReason                                         = "Can't create release branch"
+	AllBranchesExistCondition             v1beta1.ConditionType = "AllBranchesExist"
 	AllBranchMergedCondition              v1beta1.ConditionType = "AllBranchMerged"
+	AllBranchMergedReason                                       = "Merge conflict"
 	ResolveConflictBranchesReadyCondition v1beta1.ConditionType = "ResolveConflictsBranchesReady"
 )
