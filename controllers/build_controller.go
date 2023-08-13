@@ -41,6 +41,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
+const (
+	True  = "True"
+	False = "False"
+)
+
 // BuildReconciler reconciles a Build object.
 type BuildReconciler struct {
 	client.Client

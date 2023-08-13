@@ -67,8 +67,14 @@ spec:
                     failureMessage:
                       type: string
                     isMerged:
-                      type: boolean
+                      type: string
+                    isValid:
+                      type: string
+                    mergeRequestID:
+                      type: string
                     name:
+                      type: string
+                    resolveBranch:
                       type: string
                   type: object
                 type: array
@@ -122,8 +128,23 @@ spec:
                 type: array
               failureMessage:
                 type: string
-              resolveConflictBranch:
+              projectPID:
                 type: string
+              resolveConflictBranch:
+                properties:
+                  failureMessage:
+                    type: string
+                  isMerged:
+                    type: string
+                  isValid:
+                    type: string
+                  mergeRequestID:
+                    type: string
+                  name:
+                    type: string
+                  resolveBranch:
+                    type: string
+                type: object
             type: object
         type: object
     served: true

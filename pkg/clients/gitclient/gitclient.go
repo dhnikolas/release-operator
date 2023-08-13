@@ -46,10 +46,16 @@ func (c *Client) GetProject(pid string) (*gitlab.Project, bool, error) {
 	return project, true, nil
 }
 
-func (c *Client) RemoveBranch(pid, branch string) error {
-	_, err := c.c.Branches.DeleteBranch(pid, branch)
+func (c *Client) RemoveBranch(pid, branchName string) error {
+	_, exist, err := c.GetBranch(pid, branchName)
 	if err != nil {
 		return err
+	}
+	if exist {
+		_, err = c.c.Branches.DeleteBranch(pid, branchName)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -138,32 +144,56 @@ func (c *Client) AcceptMR(pid string, id int) error {
 	return nil
 }
 
+func (c *Client) GetMergeRequest(pid string, IID int) (*gitlab.MergeRequest, bool, error) {
+	mr, r, err := c.c.MergeRequests.GetMergeRequest(pid, IID, &gitlab.GetMergeRequestsOptions{})
+	if err != nil {
+		if r != nil {
+			if r.StatusCode == 404 {
+				return nil, false, nil
+			}
+		}
+		return nil, false, err
+	}
+
+	return mr, true, nil
+}
+
 func (c *Client) GetMR(pid, branchName, targetBranch string) (*gitlab.MergeRequest, bool, error) {
+	openedState := "opened"
+	withMergeStatusRecheck := true
 	mrs, _, err := c.c.MergeRequests.ListProjectMergeRequests(pid, &gitlab.ListProjectMergeRequestsOptions{
-		SourceBranch: &branchName,
-		TargetBranch: &targetBranch,
+		SourceBranch:           &branchName,
+		TargetBranch:           &targetBranch,
+		State:                  &openedState,
+		WithMergeStatusRecheck: &withMergeStatusRecheck,
 	})
 	if err != nil {
 		return nil, false, err
 	}
 	if len(mrs) > 0 {
-		return mrs[0], true, nil
+		mr, _, err := c.c.MergeRequests.GetMergeRequest(pid, mrs[0].IID, &gitlab.GetMergeRequestsOptions{})
+		if err != nil {
+			return nil, false, err
+		}
+		return mr, true, nil
 	}
 
 	return nil, false, nil
 }
 
-func (c *Client) GetOrCreateMR(pid, branchName, targetBranch string) (*gitlab.MergeRequest, error) {
-	mr, exist, err := c.GetMR(pid, branchName, targetBranch)
-	if err != nil {
-		return nil, err
-	}
-	if exist {
-		return mr, nil
+func (c *Client) GetOrCreateMR(pid, branchName, targetBranch string, IID int) (*gitlab.MergeRequest, error) {
+	if IID > 0 {
+		mr, exist, err := c.GetMergeRequest(pid, IID)
+		if err != nil {
+			return nil, err
+		}
+		if exist {
+			return mr, nil
+		}
 	}
 	notRemoveBranch := false
 	title := fmt.Sprintf("Release operator: merge branch %s to %s", branchName, targetBranch)
-	mr, err = c.CreateMR(pid, &gitlab.CreateMergeRequestOptions{
+	mr, err := c.CreateMR(pid, &gitlab.CreateMergeRequestOptions{
 		Title:              &title,
 		SourceBranch:       &branchName,
 		TargetBranch:       &targetBranch,
@@ -175,6 +205,20 @@ func (c *Client) GetOrCreateMR(pid, branchName, targetBranch string) (*gitlab.Me
 	}
 
 	return mr, nil
+}
+
+func (c *Client) RemoveMRIfExist(pid string, IID int) error {
+	mr, exist, err := c.GetMergeRequest(pid, IID)
+	if err != nil {
+		return err
+	}
+	if exist {
+		err := c.RemoveMR(pid, mr.IID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Client) MergeBranch(pid, branchName, targetBranch string) (bool, error) {

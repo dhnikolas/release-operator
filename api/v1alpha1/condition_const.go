@@ -18,4 +18,5 @@ const (
 	AllBranchMergedCondition              v1beta1.ConditionType = "AllBranchMerged"
 	AllBranchMergedReason                                       = "Merge conflict"
 	ResolveConflictBranchesReadyCondition v1beta1.ConditionType = "ResolveConflictsBranchesReady"
+	ResolveConflictBranchesReason                               = "Conflict branch"
 )

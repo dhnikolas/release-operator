@@ -6,5 +6,6 @@ spec:
   repos:
     - URL: https://scm.x5.ru/salt-public/common
       branches:
-        - name: CLDCORE-5051
+        - name: branch2
         - name: branch1
+        - name: CLDCORE-5051

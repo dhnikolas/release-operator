@@ -40,13 +40,16 @@ func branchEqual(a, b []Branch) bool {
 type RepoStatus struct {
 	URL                   string         `json:"URL"`
 	BuildBranch           string         `json:"buildBranch"`
-	ResolveConflictBranch string         `json:"resolveConflictBranch"`
+	ResolveConflictBranch string         `json:"resolveConflictBranch,omitempty"`
 	Branches              []BranchStatus `json:"branches,omitempty"`
 	FailureMessage        *string        `json:"failureMessage,omitempty"`
 }
 
 type BranchStatus struct {
 	Name           string  `json:"name,omitempty"`
-	IsMerged       bool    `json:"isMerged,omitempty"`
+	IsMerged       string  `json:"isMerged,omitempty"`
+	ResolveBranch  string  `json:"resolveBranch,omitempty"`
+	IsValid        string  `json:"isValid,omitempty"`
+	MergeRequestID string  `json:"mergeRequestID,omitempty"`
 	FailureMessage *string `json:"failureMessage,omitempty"`
 }
