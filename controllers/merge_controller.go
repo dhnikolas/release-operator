@@ -18,26 +18,26 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
 
+	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/cluster-api/util/conditions"
+	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
 	"scm.x5.ru/dis.cloud/operators/release-operator/internal/app"
-	"sigs.k8s.io/cluster-api/util/patch"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	"sigs.k8s.io/cluster-api/util/conditions"
-	"github.com/pkg/errors"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"net/url"
-	"time"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"strings"
-	"fmt"
-	"strconv"
 )
 
 const OkCommitMessage = "okok"
@@ -152,7 +152,7 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		conditions.MarkFalse(merge, releasev1alpha1.RepositoriesReadyCondition, releasev1alpha1.RepositoriesReason,
 			clusterv1.ConditionSeverityError,
 			"Error Project not exit %s ", merge.Spec.Repo.URL)
-		return ctrl.Result{}, fmt.Errorf("Project not exit %s ", merge.Spec.Repo.URL)
+		return ctrl.Result{}, fmt.Errorf("project not exit %s ", merge.Spec.Repo.URL)
 	}
 	conditions.MarkTrue(merge, releasev1alpha1.RepositoriesReadyCondition)
 	buildName := merge.Labels[releasev1alpha1.BuildNameLabel]
@@ -171,7 +171,7 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		}
 		merge.Status.BuildBranch = buildName
 		add = branches
-		merge.Status.Branches = make([]releasev1alpha1.BranchStatus, 0, 0)
+		merge.Status.Branches = make([]releasev1alpha1.BranchStatus, 0)
 		merge.Status.ResolveConflictBranch = nil
 	}
 
@@ -209,7 +209,6 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		}
 		merge.Status.ResolveConflictBranch.IsValid = True
 		merge.Status.ResolveConflictBranch.FailureMessage = nil
-
 	}
 
 	err = r.App.GitClient.GetOrCreateBranch(projectPID, buildName)
@@ -246,6 +245,7 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		currentBranch.MainBranch.MergeRequestID = fmt.Sprint(mr.IID)
 
 		switch {
+		//lint:ignore
 		case mr.MergeStatus == "can_be_merged", mr.DetailedMergeStatus == "mergeable":
 
 			err := r.App.GitClient.AcceptMR(projectPID, mr.IID)
@@ -255,13 +255,12 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 					"AcceptMR MR Error: %s %s %s %s", projectPID, buildName, mr.SourceBranch, err)
 				return ctrl.Result{Requeue: true}, err
 			}
-			fmt.Println("ACCEPT MERGE " + fmt.Sprint(mr.IID))
 			currentBranch.MainBranch.IsMerged = True
 
+		//lint:ignore
 		case mr.MergeStatus == "cannot_be_merged", mr.DetailedMergeStatus == "broken_status":
 			hasConflict = true
 		}
-
 	}
 
 	if hasConflict {
@@ -359,7 +358,6 @@ func (r *MergeReconciler) addBranchesToStatus(merge *releasev1alpha1.Merge, bran
 			b.IsValid = True
 		}
 	}
-
 }
 
 func getBranchesNames(branches []releasev1alpha1.Branch) []string {
@@ -382,7 +380,10 @@ func (r *MergeReconciler) reconcileDelete(ctx context.Context, merge *releasev1a
 	logger := log.FromContext(ctx)
 	logger.Info("reconcileDelete")
 
-	controllerutil.RemoveFinalizer(merge, releasev1alpha1.MergeFinalizer)
+	isRemoved := controllerutil.RemoveFinalizer(merge, releasev1alpha1.MergeFinalizer)
+	if !isRemoved {
+		return reconcile.Result{}, fmt.Errorf("connot remove finalizer")
+	}
 	logger.Info("Remove Finalizer")
 	return reconcile.Result{}, nil
 }

@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"path"
 
 	"github.com/pkg/errors"
@@ -28,17 +29,17 @@ import (
 	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
 	"scm.x5.ru/dis.cloud/operators/release-operator/internal/app"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 const (
@@ -112,7 +113,7 @@ func (r *BuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ct
 	}
 
 	if !build.GetDeletionTimestamp().IsZero() {
-		return r.reconcileDelete(ctx, build, allMerges)
+		return r.reconcileDelete(ctx, build)
 	}
 
 	return r.reconcileNormal(ctx, build, allMerges)
@@ -214,11 +215,14 @@ func (r *BuildReconciler) reconcileNormal(ctx context.Context, build *releasev1a
 	return reconcile.Result{}, nil
 }
 
-func (r *BuildReconciler) reconcileDelete(ctx context.Context, build *releasev1alpha1.Build, allMerges *releasev1alpha1.MergeList) (ctrl.Result, error) {
+func (r *BuildReconciler) reconcileDelete(ctx context.Context, build *releasev1alpha1.Build) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("reconcileDelete")
 
-	controllerutil.RemoveFinalizer(build, releasev1alpha1.BuildFinalizer)
+	isRemoved := controllerutil.RemoveFinalizer(build, releasev1alpha1.BuildFinalizer)
+	if !isRemoved {
+		return reconcile.Result{}, fmt.Errorf("connot remove finalizer")
+	}
 	logger.Info("Remove Finalizer")
 	return reconcile.Result{}, nil
 }
@@ -343,7 +347,6 @@ func (r *BuildReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		})).
 		Build(r)
-
 	if err != nil {
 		return err
 	}

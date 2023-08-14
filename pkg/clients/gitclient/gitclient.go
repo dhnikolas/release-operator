@@ -1,11 +1,11 @@
 package gitclient
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/xanzy/go-gitlab"
 	"go.uber.org/zap"
-	"fmt"
 )
 
 type Config struct {
@@ -144,8 +144,8 @@ func (c *Client) AcceptMR(pid string, id int) error {
 	return nil
 }
 
-func (c *Client) GetMergeRequest(pid string, IID int) (*gitlab.MergeRequest, bool, error) {
-	mr, r, err := c.c.MergeRequests.GetMergeRequest(pid, IID, &gitlab.GetMergeRequestsOptions{})
+func (c *Client) GetMergeRequest(pid string, iID int) (*gitlab.MergeRequest, bool, error) {
+	mr, r, err := c.c.MergeRequests.GetMergeRequest(pid, iID, &gitlab.GetMergeRequestsOptions{})
 	if err != nil {
 		if r != nil {
 			if r.StatusCode == 404 {
@@ -181,9 +181,9 @@ func (c *Client) GetMR(pid, branchName, targetBranch string) (*gitlab.MergeReque
 	return nil, false, nil
 }
 
-func (c *Client) GetOrCreateMR(pid, branchName, targetBranch string, IID int) (*gitlab.MergeRequest, error) {
-	if IID > 0 {
-		mr, exist, err := c.GetMergeRequest(pid, IID)
+func (c *Client) GetOrCreateMR(pid, branchName, targetBranch string, iID int) (*gitlab.MergeRequest, error) {
+	if iID > 0 {
+		mr, exist, err := c.GetMergeRequest(pid, iID)
 		if err != nil {
 			return nil, err
 		}
@@ -207,8 +207,8 @@ func (c *Client) GetOrCreateMR(pid, branchName, targetBranch string, IID int) (*
 	return mr, nil
 }
 
-func (c *Client) RemoveMRIfExist(pid string, IID int) error {
-	mr, exist, err := c.GetMergeRequest(pid, IID)
+func (c *Client) RemoveMRIfExist(pid string, iID int) error {
+	mr, exist, err := c.GetMergeRequest(pid, iID)
 	if err != nil {
 		return err
 	}
@@ -255,21 +255,21 @@ type ZapWrapper struct {
 }
 
 func (l *ZapWrapper) Printf(tmpl string, keys ...interface{}) {
-	l.Logger.Sugar().Infof(tmpl, keys...)
+	l.Logger.Sugar().Infow(tmpl, keys...)
 }
 
 func (l *ZapWrapper) Error(msg string, keysAndValues ...interface{}) {
-	l.Logger.Sugar().Error(append([]interface{}{msg}, keysAndValues...))
+	l.Logger.Sugar().Errorw(msg, keysAndValues...)
 }
 
 func (l *ZapWrapper) Info(msg string, keysAndValues ...interface{}) {
-	l.Logger.Sugar().Info(append([]interface{}{msg}, keysAndValues...))
+	l.Logger.Sugar().Infow(msg, keysAndValues...)
 }
 
 func (l *ZapWrapper) Debug(msg string, keysAndValues ...interface{}) {
-	l.Logger.Sugar().Debug(append([]interface{}{msg}, keysAndValues...))
+	l.Logger.Sugar().Debugw(msg, keysAndValues...)
 }
 
 func (l *ZapWrapper) Warn(msg string, keysAndValues ...interface{}) {
-	l.Logger.Sugar().Warn(append([]interface{}{msg}, keysAndValues...))
+	l.Logger.Sugar().Warnw(msg, keysAndValues...)
 }
