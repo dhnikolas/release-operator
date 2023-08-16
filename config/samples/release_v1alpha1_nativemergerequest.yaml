@@ -1,0 +1,10 @@
+apiVersion: release.salt.x5.ru/v1alpha1
+kind: NativeMergeRequest
+metadata:
+  name: nativemergerequest-sample
+spec:
+  projectID: salt-public/common
+  title: trymerge
+  sourceBranch: branch1
+  targetBranch: build-2023
+  autoAccept: true

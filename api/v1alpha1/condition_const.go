@@ -10,6 +10,10 @@ const (
 	AllBranchesExistCondition             v1beta1.ConditionType = "AllBranchesExist"
 	AllBranchMergedCondition              v1beta1.ConditionType = "AllBranchMerged"
 	ResolveConflictBranchesReadyCondition v1beta1.ConditionType = "ResolveConflictsBranchesReady"
+
+	BranchExistCondition        v1beta1.ConditionType = "BranchExistReady"
+	NativeMergeRequestCondition v1beta1.ConditionType = "NativeMergeRequestReady"
+	BranchCommitCondition       v1beta1.ConditionType = "BranchCommitReady"
 )
 
 const (
@@ -19,4 +23,8 @@ const (
 	ReleaseBranchReason           = "Can't create release branch"
 	AllBranchMergedReason         = "Merge conflict"
 	ResolveConflictBranchesReason = "Conflict branch"
+
+	BranchExistReason        = "Branch not exist"
+	NativeMergeRequestReason = "Native merge request is error"
+	BranchCommitReady        = "Branch not ready yet"
 )

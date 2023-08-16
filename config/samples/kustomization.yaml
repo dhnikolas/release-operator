@@ -2,4 +2,5 @@
 resources:
 - release_v1alpha1_build.yaml
 - release_v1alpha1_merge.yaml
+- release_v1alpha1_nativemergerequest.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

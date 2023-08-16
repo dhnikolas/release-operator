@@ -57,3 +57,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - nativemergerequests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - nativemergerequests/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - release.salt.x5.ru
+  resources:
+  - nativemergerequests/status
+  verbs:
+  - get
+  - patch
+  - update
