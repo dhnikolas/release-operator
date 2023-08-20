@@ -165,7 +165,6 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 	//lint:ignore
 	case mr.MergeStatus == "cannot_be_merged", mr.DetailedMergeStatus == "broken_status":
 		nativeMerge.Status.HasConflict = true
-		nativeMerge.Status.Ready = true
 		conditions.MarkTrue(nativeMerge, releasev1alpha1.AllBranchMergedCondition)
 		return ctrl.Result{}, nil
 	}
@@ -177,10 +176,6 @@ func (r *NativeMergeRequestReconciler) reconcileDelete(ctx context.Context, nati
 	logger := log.FromContext(ctx)
 	logger.Info("reconcileDelete")
 
-	isRemoved := controllerutil.RemoveFinalizer(nativeMerge, releasev1alpha1.NativeMergeFinalizer)
-	if !isRemoved {
-		return reconcile.Result{}, fmt.Errorf("connot remove finalizer")
-	}
 	logger.Info("Remove Finalizer")
 
 	mr, exist, err := r.App.GitClient.GetMergeRequest(nativeMerge.Spec.ProjectID, parseIID(nativeMerge.Status.IID))
@@ -193,6 +188,11 @@ func (r *NativeMergeRequestReconciler) reconcileDelete(ctx context.Context, nati
 		if err != nil {
 			return reconcile.Result{Requeue: true}, err
 		}
+	}
+
+	isRemoved := controllerutil.RemoveFinalizer(nativeMerge, releasev1alpha1.NativeMergeFinalizer)
+	if !isRemoved {
+		return reconcile.Result{}, fmt.Errorf("connot remove finalizer")
 	}
 
 	return reconcile.Result{}, nil

@@ -173,7 +173,51 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		add = branches
 		merge.Status.Branches = make([]releasev1alpha1.BranchStatus, 0)
 		merge.Status.ResolveConflictBranch = nil
+		merge.Status.HasConflict = false
 	}
+
+	if merge.Status.HasConflict {
+
+	} else {
+		r.addBranchesToStatus(merge, add)
+	}
+
+	notReadyYet := false
+	for i := range merge.Status.Branches {
+		b := &merge.Status.Branches[i]
+		nmrSpec := releasev1alpha1.NativeMergeRequestSpec{
+			ProjectID:    projectPID,
+			Title:        "release-operator",
+			SourceBranch: b.Name,
+			TargetBranch: buildName,
+			Labels:       []string{"release-operator"},
+			AutoAccept:   true,
+		}
+		nmr, err := r.getOrCreateNativeMR(ctx, b.MergeRequestID, merge, nmrSpec)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, err
+		}
+		b.MergeRequestID = nmr.Status.IID
+
+		if nmr.Status.HasConflict {
+			merge.Status.HasConflict = true
+		}
+
+		if !nmr.Status.Ready {
+			notReadyYet = true
+			b.IsMerged = False
+		} else {
+			b.IsMerged = True
+		}
+	}
+
+	if notReadyYet {
+		logger.Info("Wait for all branches merge " + projectPID)
+		return reconcile.Result{RequeueAfter: time.Second * 3}, nil
+	}
+
+	logger.Info("MR successful merged " + projectPID)
+	return reconcile.Result{}, nil
 
 	if merge.Status.ResolveConflictBranch != nil && len(add) > 0 {
 		r.addBranchesToStatus(merge, add)
@@ -295,6 +339,50 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *MergeReconciler) getOrCreateNativeMR(
+	ctx context.Context,
+	name string,
+	merge *releasev1alpha1.Merge,
+	spec releasev1alpha1.NativeMergeRequestSpec,
+) (*releasev1alpha1.NativeMergeRequest, error) {
+
+	nmr := new(releasev1alpha1.NativeMergeRequest)
+	exist, err := r.getObject(ctx, name, nmr)
+	if err != nil {
+		return nil, err
+	}
+	if exist {
+		return nmr, nil
+	}
+	newNmr := new(releasev1alpha1.NativeMergeRequest)
+	newNmr.Namespace = merge.Namespace
+	newNmr.GenerateName = fmt.Sprintf("%s-%s-%s-", spec.TargetBranch, merge.Name, spec.SourceBranch)
+	newNmr.Spec = spec
+
+	err = r.Create(ctx, newNmr)
+	if err != nil {
+		return nil, err
+	}
+
+	return newNmr, nil
+}
+
+func (r *MergeReconciler) getObject(ctx context.Context, name string, obj client.Object) (bool, error) {
+	err := r.Get(ctx, client.ObjectKey{Name: name}, obj)
+	if err != nil {
+		switch v := err.(type) {
+		case apierrors.APIStatus:
+			if v.Status().Code == 404 {
+				return false, nil
+			}
+			return false, err
+		default:
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 func parseIID(strVar string) int {

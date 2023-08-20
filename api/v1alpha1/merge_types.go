@@ -39,6 +39,8 @@ type MergeStatus struct {
 	ProjectPID            string         `json:"projectPID,omitempty"`
 	BuildBranch           string         `json:"buildBranch,omitempty"`
 	ResolveConflictBranch *BranchStatus  `json:"resolveConflictBranch,omitempty"`
+	RecreateBuildBranch   bool           `json:"renewBuildBranch,omitempty"`
+	HasConflict           bool           `json:"hasConflict,omitempty"`
 	Branches              []BranchStatus `json:"branches,omitempty"`
 	FailureMessage        *string        `json:"failureMessage,omitempty"`
 
