@@ -24,16 +24,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"fmt"
+	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
 	"scm.x5.ru/dis.cloud/operators/release-operator/internal/app"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/cluster-api/util/patch"
-	"github.com/pkg/errors"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/conditions"
+	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"strings"
 	"time"
 )
@@ -61,7 +61,7 @@ type NativeMergeRequestReconciler struct {
 func (r *NativeMergeRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	logger := log.FromContext(ctx)
 
-	logger.Info("Reconcile Merge " + req.Name)
+	logger.Info("Reconcile NativeMergeRequest " + req.Name)
 
 	nativeMerge := &releasev1alpha1.NativeMergeRequest{}
 	err := r.Client.Get(ctx, req.NamespacedName, nativeMerge)
@@ -94,9 +94,9 @@ func (r *NativeMergeRequestReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nativeMerge *releasev1alpha1.NativeMergeRequest) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	if !controllerutil.ContainsFinalizer(nativeMerge, releasev1alpha1.MergeFinalizer) {
-		if controllerutil.AddFinalizer(nativeMerge, releasev1alpha1.MergeFinalizer) {
-			logger.Info("Finalizer not add " + releasev1alpha1.MergeFinalizer)
+	if !controllerutil.ContainsFinalizer(nativeMerge, releasev1alpha1.NativeMergeFinalizer) {
+		if controllerutil.AddFinalizer(nativeMerge, releasev1alpha1.NativeMergeFinalizer) {
+			logger.Info("Finalizer not add " + releasev1alpha1.NativeMergeFinalizer)
 			return reconcile.Result{Requeue: true}, nil
 		}
 	}
@@ -112,7 +112,7 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 		conditions.MarkFalse(nativeMerge, releasev1alpha1.BranchExistCondition, releasev1alpha1.BranchExistReason,
 			clusterv1.ConditionSeverityError,
 			"source branch not exist %s", nativeMerge.Spec.SourceBranch)
-		return ctrl.Result{Requeue: true}, err
+		return ctrl.Result{RequeueAfter: time.Second * 20}, err
 	}
 	conditions.MarkTrue(nativeMerge, releasev1alpha1.BranchExistCondition)
 

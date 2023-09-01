@@ -72,6 +72,8 @@ spec:
                       type: string
                     mergeRequestID:
                       type: string
+                    mergeRequestName:
+                      type: string
                     name:
                       type: string
                     resolveBranch:
@@ -128,8 +130,12 @@ spec:
                 type: array
               failureMessage:
                 type: string
+              hasConflict:
+                type: boolean
               projectPID:
                 type: string
+              renewBuildBranch:
+                type: boolean
               resolveConflictBranch:
                 properties:
                   failureMessage:
@@ -139,6 +145,8 @@ spec:
                   isValid:
                     type: string
                   mergeRequestID:
+                    type: string
+                  mergeRequestName:
                     type: string
                   name:
                     type: string

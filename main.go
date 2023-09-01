@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -74,6 +75,13 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "fd59eb75.salt.x5.ru",
+		Client: client.Options{
+			Cache: &client.CacheOptions{DisableFor: []client.Object{
+				&releasev1alpha1.Build{},
+				&releasev1alpha1.Merge{},
+				&releasev1alpha1.NativeMergeRequest{},
+			}},
+		},
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

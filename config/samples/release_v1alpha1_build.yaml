@@ -4,8 +4,6 @@ metadata:
   name: release-2023.08.07-1
 spec:
   repos:
-    - URL: https://scm.x5.ru/salt-public/common
+    - URL: https://gitlab.com/dhnikolas/test-controller
       branches:
-        - name: branch1
-        - name: branch2
-        - name: CLDCORE-5051
+        - name: branch4

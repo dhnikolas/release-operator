@@ -46,10 +46,11 @@ type RepoStatus struct {
 }
 
 type BranchStatus struct {
-	Name           string  `json:"name,omitempty"`
-	IsMerged       string  `json:"isMerged,omitempty"`
-	ResolveBranch  string  `json:"resolveBranch,omitempty"`
-	IsValid        string  `json:"isValid,omitempty"`
-	MergeRequestID string  `json:"mergeRequestID,omitempty"`
-	FailureMessage *string `json:"failureMessage,omitempty"`
+	Name             string  `json:"name,omitempty"`
+	IsMerged         string  `json:"isMerged,omitempty"`
+	ResolveBranch    string  `json:"resolveBranch,omitempty"`
+	IsValid          string  `json:"isValid,omitempty"`
+	MergeRequestID   string  `json:"mergeRequestID,omitempty"`
+	MergeRequestName string  `json:"mergeRequestName,omitempty"`
+	FailureMessage   *string `json:"failureMessage,omitempty"`
 }
