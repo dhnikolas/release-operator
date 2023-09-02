@@ -6,4 +6,10 @@ spec:
   repos:
     - URL: https://gitlab.com/dhnikolas/test-controller
       branches:
+        - name: branch1
         - name: branch4
+        - name: branch3
+        - name: branch2
+    - URL: https://gitlab.com/dhnikolas/build-controller
+      branches:
+        - name: branch1

@@ -3,6 +3,7 @@ package app
 import (
 	"go.uber.org/zap"
 	"net/http"
+	"os"
 	"scm.x5.ru/dis.cloud/operators/release-operator/pkg/clients/gitclient"
 )
 
@@ -24,8 +25,8 @@ type Service struct {
 
 func New() (*App, error) {
 	var config Config
-	config.Service.GitlabToken = "glpat-ijmPo_XEBaYSG3Wp8S18"
-	config.Service.GitlabURL = "https://gitlab.com"
+	config.Service.GitlabToken = os.Getenv("GITLAB_TOKEN")
+	config.Service.GitlabURL = os.Getenv("GITLAB_HOST")
 	//if err := configurator.ReadConfig(&config, consul.Src(), vault.Src()); err != nil {
 	//	return nil, err
 	//}
