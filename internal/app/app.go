@@ -1,10 +1,10 @@
 package app
 
 import (
+	"github.com/dhnikolas/release-operator/pkg/clients/gitclient"
 	"go.uber.org/zap"
 	"net/http"
 	"os"
-	"scm.x5.ru/dis.cloud/operators/release-operator/pkg/clients/gitclient"
 )
 
 type App struct {

@@ -29,9 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
-	"scm.x5.ru/dis.cloud/operators/release-operator/controllers"
-	"scm.x5.ru/dis.cloud/operators/release-operator/internal/app"
+	releasev1alpha1 "github.com/dhnikolas/release-operator/api/v1alpha1"
+	"github.com/dhnikolas/release-operator/controllers"
+	"github.com/dhnikolas/release-operator/internal/app"
 )
 
 var (

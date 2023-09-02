@@ -25,10 +25,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"fmt"
+	releasev1alpha1 "github.com/dhnikolas/release-operator/api/v1alpha1"
+	"github.com/dhnikolas/release-operator/internal/app"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	releasev1alpha1 "scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1"
-	"scm.x5.ru/dis.cloud/operators/release-operator/internal/app"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/cluster-api/util/patch"

@@ -5,7 +5,7 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: release-operator
-repo: scm.x5.ru/dis.cloud/operators/release-operator
+repo: github.com/dhnikolas/release-operator
 resources:
 - api:
     crdVersion: v1
@@ -14,7 +14,7 @@ resources:
   domain: salt.x5.ru
   group: release
   kind: Build
-  path: scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1
+  path: github.com/dhnikolas/release-operator/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -23,7 +23,7 @@ resources:
   domain: salt.x5.ru
   group: release
   kind: Merge
-  path: scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1
+  path: github.com/dhnikolas/release-operator/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -32,6 +32,6 @@ resources:
   domain: salt.x5.ru
   group: release
   kind: NativeMergeRequest
-  path: scm.x5.ru/dis.cloud/operators/release-operator/api/v1alpha1
+  path: github.com/dhnikolas/release-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

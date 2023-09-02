@@ -1,4 +1,4 @@
-module scm.x5.ru/dis.cloud/operators/release-operator
+module github.com/dhnikolas/release-operator
 
 go 1.18
 
