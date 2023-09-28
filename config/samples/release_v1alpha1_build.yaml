@@ -4,12 +4,6 @@ metadata:
   name: release-2023.08.07-1
 spec:
   repos:
-    - URL: https://gitlab.com/dhnikolas/test-controller
+    - URL: https://scm.x5.ru/dis.cloud/examples/test-runners
       branches:
-        - name: branch1
-        - name: branch4
-        - name: branch3
         - name: branch2
-    - URL: https://gitlab.com/dhnikolas/build-controller
-      branches:
-        - name: branch1
