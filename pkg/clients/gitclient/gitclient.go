@@ -135,6 +135,57 @@ func (c *Client) GetOrCreateBranch(pid string, branchName string) error {
 
 	return nil
 }
+func (c *Client) GetOrCreateTag(pid string, name, branchName string) (*gitlab.Tag, error) {
+	tag, exist, err := c.GetTag(pid, name)
+	if err != nil {
+		return nil, err
+	}
+	if exist {
+		return tag, nil
+	}
+	newTag, _, err := c.c.Tags.CreateTag(pid, &gitlab.CreateTagOptions{
+		TagName: &name,
+		Ref:     &branchName,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return newTag, nil
+}
+
+func (c *Client) GetTag(pid, name string) (*gitlab.Tag, bool, error) {
+	tag, r, err := c.c.Tags.GetTag(pid, name)
+	if err != nil {
+		if r != nil {
+			if r.StatusCode == 404 {
+				return nil, false, nil
+			}
+		}
+		return nil, false, err
+	}
+
+	return tag, true, nil
+}
+
+func (c *Client) ListTags(pid string) ([]*gitlab.Tag, bool, error) {
+	name := "name"
+	tags, r, err := c.c.Tags.ListTags(pid, &gitlab.ListTagsOptions{OrderBy: &name})
+	if err != nil {
+		if r != nil {
+			if r.StatusCode == 404 {
+				return nil, false, nil
+			}
+		}
+		return nil, false, err
+	}
+
+	if len(tags) == 0 {
+		return tags, false, nil
+	}
+
+	return tags, true, nil
+}
 
 func (c *Client) AcceptMR(pid string, id int) error {
 	_, _, err := c.c.MergeRequests.AcceptMergeRequest(pid, id, &gitlab.AcceptMergeRequestOptions{})

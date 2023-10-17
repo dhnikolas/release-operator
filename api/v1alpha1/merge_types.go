@@ -42,6 +42,8 @@ type MergeStatus struct {
 	RecreateBuildBranch   bool           `json:"renewBuildBranch,omitempty"`
 	HasConflict           bool           `json:"hasConflict,omitempty"`
 	Branches              []BranchStatus `json:"branches,omitempty"`
+	FinalMR               string         `json:"finalMR,omitempty"`
+	FinalTag              string         `json:"finalTag,omitempty"`
 	FailureMessage        *string        `json:"failureMessage,omitempty"`
 
 	Conditions clusterv1.Conditions `json:"conditions,omitempty"`

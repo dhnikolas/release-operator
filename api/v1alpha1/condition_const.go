@@ -14,6 +14,9 @@ const (
 	BranchExistCondition        v1beta1.ConditionType = "BranchExistReady"
 	NativeMergeRequestCondition v1beta1.ConditionType = "NativeMergeRequestReady"
 	BranchCommitCondition       v1beta1.ConditionType = "BranchCommitReady"
+
+	TagCondition     v1beta1.ConditionType = "TagReady"
+	FinalMRCondition v1beta1.ConditionType = "FinalMRReady"
 )
 
 const (
@@ -27,4 +30,7 @@ const (
 	BranchExistReason        = "Branch not exist"
 	NativeMergeRequestReason = "Native merge request is error"
 	BranchCommitReady        = "Branch not ready yet"
+
+	TagReason     = "Tag not ready yet"
+	FinalMRReason = "FinalMR not ready yet"
 )

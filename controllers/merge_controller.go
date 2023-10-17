@@ -39,6 +39,7 @@ import (
 
 	releasev1alpha1 "github.com/dhnikolas/release-operator/api/v1alpha1"
 	"github.com/dhnikolas/release-operator/internal/app"
+	"github.com/blang/semver"
 )
 
 const OkCommitMessage = "okok"
@@ -177,6 +178,7 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		merge.Status.ResolveConflictBranch = nil
 		merge.Status.HasConflict = false
 		merge.Status.RecreateBuildBranch = true
+		r.deleteFinalMR(ctx, merge)
 	}
 
 	logger.Info("Branches: " + fmt.Sprintf("%v", merge.Status.Branches))
@@ -200,55 +202,19 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		}
 	}
 
+	if len(add) > 0 {
+		err = r.deleteFinalMR(ctx, merge)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, err
+		}
+	}
+
 	r.addBranchesToStatus(merge, add)
-	if merge.Status.HasConflict || merge.Status.ResolveConflictBranch != nil {
-		currentResolveBranchName := r.getResolveBranchName(merge)
-		if merge.Status.ResolveConflictBranch != nil && merge.Status.ResolveConflictBranch.Name != "" && currentResolveBranchName != merge.Status.ResolveConflictBranch.Name {
-			err := r.App.GitClient.RemoveBranch(projectPID, merge.Status.ResolveConflictBranch.Name)
-			if err != nil {
-				return ctrl.Result{Requeue: true}, err
-			}
-			r.deleteBranchesNativeMR(ctx, merge)
-			merge.Status.ResolveConflictBranch = nil
-			err = r.App.GitClient.RecreateBranch(projectPID, buildName)
-			if err != nil {
-				conditions.MarkFalse(merge, releasev1alpha1.ReleaseBranchReadyCondition, releasev1alpha1.ReleaseBranchReason,
-					clusterv1.ConditionSeverityError,
-					"Recreate branch error: URL %s %s", merge.Spec.Repo.URL, err)
-				return ctrl.Result{Requeue: true}, err
-			}
-		}
-		err = r.App.GitClient.GetOrCreateBranch(projectPID, currentResolveBranchName)
+	if merge.Status.HasConflict || (merge.Status.ResolveConflictBranch != nil && merge.Status.ResolveConflictBranch.IsMerged != True) {
+		err := r.reconcileConflict(ctx, merge)
 		if err != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
-		mrName := ""
-		if merge.Status.ResolveConflictBranch != nil {
-			mrName = merge.Status.ResolveConflictBranch.MergeRequestName
-		}
-		merge.Status.ResolveConflictBranch = &releasev1alpha1.BranchStatus{
-			Name:             currentResolveBranchName,
-			IsMerged:         False,
-			IsValid:          True,
-			MergeRequestName: mrName,
-		}
-
-		nmrSpec := releasev1alpha1.NativeMergeRequestSpec{
-			ProjectID:                projectPID,
-			Title:                    "release-operator",
-			SourceBranch:             currentResolveBranchName,
-			TargetBranch:             buildName,
-			Labels:                   []string{"release-operator"},
-			CheckSourceBranchMessage: OkCommitMessage,
-			AutoAccept:               true,
-		}
-
-		nmr, err := r.getOrCreateNativeMR(ctx, merge.Status.ResolveConflictBranch.MergeRequestName, merge, nmrSpec)
-		if err != nil {
-			return ctrl.Result{Requeue: true}, err
-		}
-		merge.Status.ResolveConflictBranch.MergeRequestName = nmr.Name
-		r.setNewResolveBranch(merge, nmr.Name, nmr.Status.IID)
 	}
 
 	notReadyYet := false
@@ -289,6 +255,9 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		merge.Status.RecreateBuildBranch = true
 	} else {
 		merge.Status.HasConflict = false
+		if merge.Status.ResolveConflictBranch != nil {
+			merge.Status.ResolveConflictBranch.IsMerged = True
+		}
 	}
 
 	if notReadyYet {
@@ -299,9 +268,68 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		return reconcile.Result{RequeueAfter: time.Second * 3}, nil
 	}
 
+	err = r.createFinalMR(ctx, merge)
+	if err != nil {
+		return reconcile.Result{RequeueAfter: time.Second * 3}, err
+	}
+
 	conditions.MarkTrue(merge, releasev1alpha1.AllBranchMergedCondition)
 	logger.Info("MR successful merged " + projectPID)
 	return reconcile.Result{}, nil
+}
+
+func (r *MergeReconciler) reconcileConflict(ctx context.Context, merge *releasev1alpha1.Merge) error {
+	projectPID := merge.Status.ProjectPID
+	buildName := merge.Labels[releasev1alpha1.BuildNameLabel]
+	currentResolveBranchName := r.getResolveBranchName(merge)
+	if merge.Status.ResolveConflictBranch != nil && merge.Status.ResolveConflictBranch.Name != "" && currentResolveBranchName != merge.Status.ResolveConflictBranch.Name {
+		err := r.App.GitClient.RemoveBranch(projectPID, merge.Status.ResolveConflictBranch.Name)
+		if err != nil {
+			return err
+		}
+		r.deleteBranchesNativeMR(ctx, merge)
+		merge.Status.ResolveConflictBranch = nil
+		err = r.App.GitClient.RecreateBranch(projectPID, buildName)
+		if err != nil {
+			conditions.MarkFalse(merge, releasev1alpha1.ReleaseBranchReadyCondition, releasev1alpha1.ReleaseBranchReason,
+				clusterv1.ConditionSeverityError,
+				"Recreate branch error: URL %s %s", merge.Spec.Repo.URL, err)
+			return err
+		}
+	}
+	r.deleteFinalMR(ctx, merge)
+	err := r.App.GitClient.GetOrCreateBranch(projectPID, currentResolveBranchName)
+	if err != nil {
+		return err
+	}
+	mrName := ""
+	if merge.Status.ResolveConflictBranch != nil {
+		mrName = merge.Status.ResolveConflictBranch.MergeRequestName
+	}
+	merge.Status.ResolveConflictBranch = &releasev1alpha1.BranchStatus{
+		Name:             currentResolveBranchName,
+		IsMerged:         False,
+		IsValid:          True,
+		MergeRequestName: mrName,
+	}
+
+	nmrSpec := releasev1alpha1.NativeMergeRequestSpec{
+		ProjectID:                projectPID,
+		Title:                    "release-operator",
+		SourceBranch:             currentResolveBranchName,
+		TargetBranch:             buildName,
+		Labels:                   []string{"release-operator"},
+		CheckSourceBranchMessage: OkCommitMessage,
+		AutoAccept:               true,
+	}
+
+	nmr, err := r.getOrCreateNativeMR(ctx, merge.Status.ResolveConflictBranch.MergeRequestName, merge, nmrSpec)
+	if err != nil {
+		return err
+	}
+	merge.Status.ResolveConflictBranch.MergeRequestName = nmr.Name
+	r.setNewResolveBranch(merge, nmr.Name, nmr.Status.IID)
+	return nil
 }
 
 func (r *MergeReconciler) getResolveBranchName(merge *releasev1alpha1.Merge) string {
@@ -375,6 +403,95 @@ func (r *MergeReconciler) getOrCreateNativeMR(
 	return newNmr, nil
 }
 
+func (r *MergeReconciler) createFinalMR(ctx context.Context, merge *releasev1alpha1.Merge) error {
+	projectPID := merge.Status.ProjectPID
+	buildName := merge.Labels[releasev1alpha1.BuildNameLabel]
+
+	err := r.createFinalTag(ctx, merge)
+	if err != nil {
+		conditions.MarkFalse(merge, releasev1alpha1.TagCondition, releasev1alpha1.TagReason,
+			clusterv1.ConditionSeverityError,
+			"Recreate branch error: URL %s %s", merge.Spec.Repo.URL, err)
+		return err
+	}
+	conditions.MarkTrue(merge, releasev1alpha1.TagCondition)
+
+	nmrSpec := releasev1alpha1.NativeMergeRequestSpec{
+		ProjectID:    projectPID,
+		Title:        "release-operator",
+		SourceBranch: buildName,
+		TargetBranch: "main",
+		Labels:       []string{"release-operator"},
+		AutoAccept:   false,
+	}
+	nmr, err := r.getOrCreateNativeMR(ctx, merge.Status.FinalMR, merge, nmrSpec)
+	if err != nil {
+		conditions.MarkFalse(merge, releasev1alpha1.FinalMRCondition, releasev1alpha1.FinalMRReason,
+			clusterv1.ConditionSeverityError,
+			"Recreate branch error: URL %s %s", merge.Spec.Repo.URL, err)
+		return err
+	}
+	merge.Status.FinalMR = nmr.Name
+	conditions.MarkTrue(merge, releasev1alpha1.FinalMRCondition)
+
+	return nil
+}
+
+func (r *MergeReconciler) deleteFinalMR(ctx context.Context, merge *releasev1alpha1.Merge) error {
+	if merge.Status.FinalMR == "" {
+		return nil
+	}
+
+	err := r.deleteNativeMR(ctx, merge, merge.Status.FinalMR)
+	if err != nil {
+		return err
+	}
+
+	merge.Status.FinalMR = ""
+	merge.Status.FinalTag = ""
+
+	return nil
+}
+func (r *MergeReconciler) createFinalTag(ctx context.Context, merge *releasev1alpha1.Merge) error {
+	buildName := merge.Labels[releasev1alpha1.BuildNameLabel]
+	baseTag := "v0.0.1"
+	projectPID := merge.Status.ProjectPID
+	finalTag := merge.Status.FinalTag
+	if finalTag == "" {
+		tags, exist, err := r.App.GitClient.ListTags(projectPID)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			finalTag = baseTag
+		} else {
+			versions := make([]string, 0, len(tags))
+			for _, tag := range tags {
+				versions = append(versions, tag.Name)
+			}
+			currentVersion, err := getLatestVersion(versions)
+			if err != nil {
+				return err
+			}
+			version, err := semver.Parse(currentVersion)
+			if err != nil {
+				return err
+			}
+			version.Patch++
+			finalTag = "v" + version.String()
+		}
+	}
+
+	tag, err := r.App.GitClient.GetOrCreateTag(projectPID, finalTag, buildName)
+	if err != nil {
+		return err
+	}
+
+	merge.Status.FinalTag = tag.Name
+
+	return err
+}
+
 func (r *MergeReconciler) deleteNativeMR(ctx context.Context, merge *releasev1alpha1.Merge, name string) error {
 	newNmr := new(releasev1alpha1.NativeMergeRequest)
 	newNmr.Namespace = merge.Namespace
@@ -391,6 +508,24 @@ func (r *MergeReconciler) deleteNativeMR(ctx context.Context, merge *releasev1al
 		return err
 	}
 	return nil
+}
+
+func getLatestVersion(versions []string) (string, error) {
+	v := make([]semver.Version, 0, len(versions))
+	for _, version := range versions {
+		sv, err := semver.ParseTolerant(version)
+		if err != nil {
+			return "", err
+		}
+		v = append(v, sv)
+	}
+	if len(v) == 0 {
+		return "", errors.New("no versions in slice ")
+	}
+	semver.Sort(v)
+	latest := v[len(v)-1]
+
+	return latest.String(), nil
 }
 
 func (r *MergeReconciler) getObject(ctx context.Context, name string, obj client.Object) (bool, error) {

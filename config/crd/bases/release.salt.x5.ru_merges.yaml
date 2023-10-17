@@ -130,6 +130,10 @@ spec:
                 type: array
               failureMessage:
                 type: string
+              finalMR:
+                type: string
+              finalTag:
+                type: string
               hasConflict:
                 type: boolean
               projectPID:
