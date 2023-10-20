@@ -113,6 +113,8 @@ spec:
                   - type
                   type: object
                 type: array
+              deleted:
+                type: boolean
               hasConflict:
                 type: boolean
               ready:

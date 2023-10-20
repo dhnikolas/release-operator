@@ -80,6 +80,38 @@ func (in *Merge) SetConditions(conditions clusterv1.Conditions) {
 	in.Status.Conditions = conditions
 }
 
+func (rs *MergeStatus) NotValidBranches() []string {
+	result := make([]string, 0, len(rs.Branches))
+	for _, branch := range rs.Branches {
+		if !branch.IsValid {
+			result = append(result, branch.Name)
+		}
+	}
+
+	return result
+}
+
+func (rs *MergeStatus) ConflictBranches() []string {
+	result := make([]string, 0, len(rs.Branches))
+	for _, branch := range rs.Branches {
+		if !branch.IsConflict {
+			result = append(result, branch.Name)
+		}
+	}
+
+	return result
+}
+
+func (rs *MergeStatus) BranchesAlreadyProcessed() bool {
+	for _, branch := range rs.Branches {
+		if !branch.Processed {
+			return false
+		}
+	}
+
+	return true
+}
+
 func init() {
 	SchemeBuilder.Register(&Merge{}, &MergeList{})
 }

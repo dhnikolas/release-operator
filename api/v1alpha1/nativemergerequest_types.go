@@ -50,6 +50,7 @@ type NativeMergeRequestStatus struct {
 	IID         string `json:"IID,omitempty"`
 	HasConflict bool   `json:"hasConflict,omitempty"`
 	Ready       bool   `json:"ready,omitempty"`
+	Deleted     bool   `json:"deleted,omitempty"`
 
 	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
 }

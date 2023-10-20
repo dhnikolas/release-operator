@@ -66,18 +66,20 @@ spec:
                   properties:
                     failureMessage:
                       type: string
+                    isConflict:
+                      type: boolean
                     isMerged:
-                      type: string
+                      type: boolean
                     isValid:
-                      type: string
+                      type: boolean
                     mergeRequestID:
                       type: string
                     mergeRequestName:
                       type: string
                     name:
                       type: string
-                    resolveBranch:
-                      type: string
+                    processed:
+                      type: boolean
                   type: object
                 type: array
               buildBranch:
@@ -144,18 +146,20 @@ spec:
                 properties:
                   failureMessage:
                     type: string
+                  isConflict:
+                    type: boolean
                   isMerged:
-                    type: string
+                    type: boolean
                   isValid:
-                    type: string
+                    type: boolean
                   mergeRequestID:
                     type: string
                   mergeRequestName:
                     type: string
                   name:
                     type: string
-                  resolveBranch:
-                    type: string
+                  processed:
+                    type: boolean
                 type: object
             type: object
         type: object

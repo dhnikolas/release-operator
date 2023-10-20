@@ -101,6 +101,11 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 		}
 	}
 
+	if nativeMerge.Status.Deleted {
+		logger.Info("Already deleted")
+		return ctrl.Result{}, nil
+	}
+
 	sourceBranch, branchExist, err := r.App.GitClient.GetBranch(nativeMerge.Spec.ProjectID, nativeMerge.Spec.SourceBranch)
 	if err != nil {
 		conditions.MarkFalse(nativeMerge, releasev1alpha1.BranchExistCondition, releasev1alpha1.BranchExistReason,
@@ -133,7 +138,7 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 		nativeMerge.Spec.TargetBranch,
 		parseIID(nativeMerge.Status.IID))
 	if err != nil {
-		conditions.MarkFalse(nativeMerge, releasev1alpha1.AllBranchMergedCondition, releasev1alpha1.AllBranchMergedReason,
+		conditions.MarkFalse(nativeMerge, releasev1alpha1.NativeMergeRequestCondition, releasev1alpha1.AllBranchMergedReason,
 			clusterv1.ConditionSeverityWarning,
 			"GetOrCreate MR Error: %s %s %s", nativeMerge.Spec.SourceBranch, nativeMerge.Spec.TargetBranch, err)
 		return ctrl.Result{RequeueAfter: time.Second * 5}, err
@@ -152,7 +157,7 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 	case mr.MergeStatus == "can_be_merged", mr.DetailedMergeStatus == "mergeable":
 		err := r.App.GitClient.AcceptMR(nativeMerge.Spec.ProjectID, mr.IID)
 		if err != nil {
-			conditions.MarkFalse(nativeMerge, releasev1alpha1.AllBranchMergedCondition, releasev1alpha1.AllBranchMergedReason,
+			conditions.MarkFalse(nativeMerge, releasev1alpha1.NativeMergeRequestCondition, releasev1alpha1.AllBranchMergedReason,
 				clusterv1.ConditionSeverityWarning,
 				"AcceptMR MR Error: %s %s %s %s",
 				nativeMerge.Spec.ProjectID,
@@ -165,7 +170,12 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 	//lint:ignore
 	case mr.MergeStatus == "cannot_be_merged", mr.DetailedMergeStatus == "broken_status":
 		nativeMerge.Status.HasConflict = true
-		conditions.MarkTrue(nativeMerge, releasev1alpha1.AllBranchMergedCondition)
+		err := r.App.GitClient.RemoveMR(nativeMerge.Spec.ProjectID, mr.IID)
+		if err != nil {
+			return reconcile.Result{Requeue: true}, err
+		}
+		nativeMerge.Status.Deleted = true
+		conditions.MarkTrue(nativeMerge, releasev1alpha1.NativeMergeRequestCondition)
 		return ctrl.Result{}, nil
 	}
 
