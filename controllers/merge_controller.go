@@ -145,6 +145,19 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 	statusBranches := getStatusBranchesNames(merge.Status.Branches)
 	add, remove, _ := FullDiff(branches, statusBranches)
 
+	if len(add) > 0 || len(remove) > 0 {
+		err := r.removeConflictStateIfExist(ctx, merge)
+		if err != nil {
+			logger.Error(err, "Cannot remove conflict state")
+			return ctrl.Result{Requeue: true}, err
+		}
+		err = r.deleteFinalMRIfExist(ctx, merge)
+		if err != nil {
+			logger.Error(err, "Cannot remove final MR")
+			return ctrl.Result{Requeue: true}, err
+		}
+	}
+
 	if len(remove) > 0 {
 		err = r.App.GitClient.RemoveBranch(projectPID, buildName)
 		if err != nil {
@@ -157,21 +170,9 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		merge.Status.BuildBranch = buildName
 		add = branches
 		merge.Status.Branches = make([]releasev1alpha1.BranchStatus, 0)
-		merge.Status.ResolveConflictBranch = nil
-		r.deleteFinalMR(ctx, merge)
-	}
-
-	logger.Info("Branches: " + fmt.Sprintf("%v", merge.Status.Branches))
-
-	if len(add) > 0 {
-		err = r.deleteFinalMR(ctx, merge)
-		if err != nil {
-			return ctrl.Result{Requeue: true}, err
-		}
 	}
 
 	r.addBranchesToStatus(merge, add)
-
 	err = r.App.GitClient.GetOrCreateBranch(projectPID, buildName)
 	if err != nil {
 		conditions.MarkFalse(merge, releasev1alpha1.ReleaseBranchReadyCondition, releasev1alpha1.ReleaseBranchReason,
@@ -219,6 +220,18 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		return reconcile.Result{RequeueAfter: time.Second * 3}, nil
 	}
 
+	if merge.Status.HasConflict() {
+		logger.Info("Reconcile conflict " + projectPID)
+		conflictResolved, err := r.reconcileConflict(ctx, merge)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		if !conflictResolved {
+			return reconcile.Result{RequeueAfter: time.Second * 5}, nil
+		}
+		logger.Info("Conflict resolved " + projectPID)
+	}
+
 	tagCreated, err := r.createTag(ctx, merge)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -238,39 +251,26 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 	return reconcile.Result{}, nil
 }
 
-func (r *MergeReconciler) reconcileConflict(ctx context.Context, merge *releasev1alpha1.Merge) error {
+func (r *MergeReconciler) reconcileConflict(ctx context.Context, merge *releasev1alpha1.Merge) (bool, error) {
 	projectPID := merge.Status.ProjectPID
 	buildName := merge.Labels[releasev1alpha1.BuildNameLabel]
-	currentResolveBranchName := r.getResolveBranchName(merge)
-	if merge.Status.ResolveConflictBranch != nil && merge.Status.ResolveConflictBranch.Name != "" && currentResolveBranchName != merge.Status.ResolveConflictBranch.Name {
-		err := r.App.GitClient.RemoveBranch(projectPID, merge.Status.ResolveConflictBranch.Name)
-		if err != nil {
-			return err
-		}
-		r.deleteBranchesNativeMR(ctx, merge)
-		merge.Status.ResolveConflictBranch = nil
-		err = r.App.GitClient.RecreateBranch(projectPID, buildName)
+	if !merge.Status.ConflictState.RecreatedBuildBranch {
+		err := r.App.GitClient.RecreateBranch(projectPID, buildName)
 		if err != nil {
 			conditions.MarkFalse(merge, releasev1alpha1.ReleaseBranchReadyCondition, releasev1alpha1.ReleaseBranchReason,
 				clusterv1.ConditionSeverityError,
 				"Recreate branch error: URL %s %s", merge.Spec.Repo.URL, err)
-			return err
+			return false, err
 		}
+		merge.Status.ConflictState.RecreatedBuildBranch = true
 	}
-	r.deleteFinalMR(ctx, merge)
+	currentResolveBranchName := r.getResolveBranchName(merge)
 	err := r.App.GitClient.GetOrCreateBranch(projectPID, currentResolveBranchName)
 	if err != nil {
-		return err
-	}
-	mrName := ""
-	if merge.Status.ResolveConflictBranch != nil {
-		mrName = merge.Status.ResolveConflictBranch.MergeRequestName
-	}
-	merge.Status.ResolveConflictBranch = &releasev1alpha1.BranchStatus{
-		Name:             currentResolveBranchName,
-		IsMerged:         false,
-		IsValid:          true,
-		MergeRequestName: mrName,
+		conditions.MarkFalse(merge, releasev1alpha1.ReleaseBranchReadyCondition, releasev1alpha1.ReleaseBranchReason,
+			clusterv1.ConditionSeverityError,
+			"Get or create resolve branch error: URL %s %s", merge.Spec.Repo.URL, err)
+		return false, err
 	}
 
 	nmrSpec := releasev1alpha1.NativeMergeRequestSpec{
@@ -282,13 +282,47 @@ func (r *MergeReconciler) reconcileConflict(ctx context.Context, merge *releasev
 		CheckSourceBranchMessage: OkCommitMessage,
 		AutoAccept:               true,
 	}
-
-	nmr, err := r.getOrCreateNativeMR(ctx, merge.Status.ResolveConflictBranch.MergeRequestName, merge, nmrSpec)
+	nmr, err := r.getOrCreateNativeMR(ctx, merge.Status.ConflictState.ResolveBranch.MergeRequestName, merge, nmrSpec)
 	if err != nil {
-		return err
+		conditions.MarkFalse(merge, releasev1alpha1.ResolveConflictBranchesReadyCondition, releasev1alpha1.ResolveConflictBranchesReason,
+			clusterv1.ConditionSeverityError,
+			"Create MR for conflict resolve branch error: URL %s %s", merge.Spec.Repo.URL, err)
+		return false, err
 	}
-	merge.Status.ResolveConflictBranch.MergeRequestName = nmr.Name
-	r.setNewResolveBranch(merge, nmr.Name, nmr.Status.IID)
+	merge.Status.ConflictState.ResolveBranch.Name = currentResolveBranchName
+	merge.Status.ConflictState.ResolveBranch.MergeRequestID = nmr.Status.IID
+	merge.Status.ConflictState.ResolveBranch.MergeRequestName = nmr.Name
+	merge.Status.ConflictState.ResolveBranch.IsConflict = nmr.Status.HasConflict
+	merge.Status.ConflictState.ResolveBranch.IsMerged = nmr.Status.Ready
+	merge.Status.ConflictState.ResolveBranch.Processed = conditions.IsTrue(nmr, clusterv1.ReadyCondition)
+
+	if !merge.Status.ConflictState.ResolveBranch.IsMerged {
+		conditions.MarkFalse(merge, releasev1alpha1.ResolveConflictBranchesReadyCondition, releasev1alpha1.ResolveConflictBranchesReason,
+			clusterv1.ConditionSeverityWarning,
+			"Wait for resolve conflict: URL %s %s", merge.Spec.Repo.URL, err)
+		return false, nil
+	}
+	conditions.MarkTrue(merge, releasev1alpha1.ResolveConflictBranchesReadyCondition)
+
+	return true, nil
+}
+
+func (r *MergeReconciler) removeConflictStateIfExist(ctx context.Context, merge *releasev1alpha1.Merge) error {
+	projectPID := merge.Status.ProjectPID
+	if len(merge.Status.ConflictState.ResolveBranch.Name) > 0 {
+		err := r.App.GitClient.RemoveBranch(projectPID, merge.Status.ConflictState.ResolveBranch.Name)
+		if err != nil {
+			return err
+		}
+	}
+	if len(merge.Status.ConflictState.ResolveBranch.MergeRequestName) > 0 {
+		err := r.deleteNativeMR(ctx, merge, merge.Status.ConflictState.ResolveBranch.MergeRequestName)
+		if err != nil {
+			return err
+		}
+	}
+	merge.Status.ConflictState = releasev1alpha1.ConflictState{}
+
 	return nil
 }
 
@@ -428,7 +462,7 @@ func (r *MergeReconciler) createFinalMR(ctx context.Context, merge *releasev1alp
 	return nil
 }
 
-func (r *MergeReconciler) deleteFinalMR(ctx context.Context, merge *releasev1alpha1.Merge) error {
+func (r *MergeReconciler) deleteFinalMRIfExist(ctx context.Context, merge *releasev1alpha1.Merge) error {
 	if merge.Status.FinalMR == "" {
 		return nil
 	}
@@ -543,32 +577,6 @@ func parseIID(strVar string) int {
 	return intVar
 }
 
-func (r *MergeReconciler) setResolveBranch(projectPID string, merge *releasev1alpha1.Merge) error {
-	resolveBranchNameSlice := make([]string, 0, len(merge.Status.Branches))
-	for i := range merge.Status.Branches {
-		b := &merge.Status.Branches[i]
-		resolveBranchNameSlice = append(resolveBranchNameSlice, b.Name)
-	}
-	resolveBranchName := strings.Join(resolveBranchNameSlice, "_")
-	err := r.App.GitClient.GetOrCreateBranch(projectPID, resolveBranchName)
-	if err != nil {
-		return err
-	}
-	for i := range merge.Status.Branches {
-		b := &merge.Status.Branches[i]
-		b.IsMerged = false
-		b.MergeRequestID = fmt.Sprint(0)
-	}
-	msg := "Conflict not resolve yet. Need commit message - " + OkCommitMessage
-	merge.Status.ResolveConflictBranch = &releasev1alpha1.BranchStatus{
-		Name:           resolveBranchName,
-		IsMerged:       false,
-		IsValid:        false,
-		FailureMessage: &msg,
-	}
-	return nil
-}
-
 func (r *MergeReconciler) addBranchesToStatus(merge *releasev1alpha1.Merge, branches []string) {
 	for _, b := range branches {
 		merge.Status.Branches = append(merge.Status.Branches, releasev1alpha1.BranchStatus{
@@ -633,7 +641,7 @@ func patchMerge(ctx context.Context, patchHelper *patch.Helper, merge *releasev1
 		releasev1alpha1.AllBranchMergedCondition,
 	}
 
-	if merge.Status.ResolveConflictBranch != nil {
+	if merge.Status.HasConflict() {
 		applicableConditions = append(applicableConditions, releasev1alpha1.ResolveConflictBranchesReadyCondition)
 	}
 

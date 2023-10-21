@@ -130,37 +130,38 @@ spec:
                   - type
                   type: object
                 type: array
+              conflictState:
+                properties:
+                  recreatedBuildBranch:
+                    type: boolean
+                  resolveBranch:
+                    properties:
+                      failureMessage:
+                        type: string
+                      isConflict:
+                        type: boolean
+                      isMerged:
+                        type: boolean
+                      isValid:
+                        type: boolean
+                      mergeRequestID:
+                        type: string
+                      mergeRequestName:
+                        type: string
+                      name:
+                        type: string
+                      processed:
+                        type: boolean
+                    type: object
+                type: object
               failureMessage:
                 type: string
               finalMR:
                 type: string
               finalTag:
                 type: string
-              hasConflict:
-                type: boolean
               projectPID:
                 type: string
-              renewBuildBranch:
-                type: boolean
-              resolveConflictBranch:
-                properties:
-                  failureMessage:
-                    type: string
-                  isConflict:
-                    type: boolean
-                  isMerged:
-                    type: boolean
-                  isValid:
-                    type: boolean
-                  mergeRequestID:
-                    type: string
-                  mergeRequestName:
-                    type: string
-                  name:
-                    type: string
-                  processed:
-                    type: boolean
-                type: object
             type: object
         type: object
     served: true

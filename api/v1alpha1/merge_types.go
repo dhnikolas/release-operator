@@ -35,16 +35,14 @@ type MergeSpec struct {
 
 // MergeStatus defines the observed state of Merge.
 type MergeStatus struct {
-	URL                   string         `json:"URL,omitempty"`
-	ProjectPID            string         `json:"projectPID,omitempty"`
-	BuildBranch           string         `json:"buildBranch,omitempty"`
-	ResolveConflictBranch *BranchStatus  `json:"resolveConflictBranch,omitempty"`
-	RecreateBuildBranch   bool           `json:"renewBuildBranch,omitempty"`
-	HasConflict           bool           `json:"hasConflict,omitempty"`
-	Branches              []BranchStatus `json:"branches,omitempty"`
-	FinalMR               string         `json:"finalMR,omitempty"`
-	FinalTag              string         `json:"finalTag,omitempty"`
-	FailureMessage        *string        `json:"failureMessage,omitempty"`
+	URL            string         `json:"URL,omitempty"`
+	ProjectPID     string         `json:"projectPID,omitempty"`
+	BuildBranch    string         `json:"buildBranch,omitempty"`
+	ConflictState  ConflictState  `json:"conflictState,omitempty"`
+	Branches       []BranchStatus `json:"branches,omitempty"`
+	FinalMR        string         `json:"finalMR,omitempty"`
+	FinalTag       string         `json:"finalTag,omitempty"`
+	FailureMessage *string        `json:"failureMessage,omitempty"`
 
 	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
 }
@@ -94,12 +92,15 @@ func (rs *MergeStatus) NotValidBranches() []string {
 func (rs *MergeStatus) ConflictBranches() []string {
 	result := make([]string, 0, len(rs.Branches))
 	for _, branch := range rs.Branches {
-		if !branch.IsConflict {
+		if branch.IsConflict {
 			result = append(result, branch.Name)
 		}
 	}
-
 	return result
+}
+
+func (rs *MergeStatus) HasConflict() bool {
+	return len(rs.ConflictBranches()) > 0
 }
 
 func (rs *MergeStatus) BranchesAlreadyProcessed() bool {

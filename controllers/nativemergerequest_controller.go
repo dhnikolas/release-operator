@@ -106,6 +106,9 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 		return ctrl.Result{}, nil
 	}
 
+	conditions.MarkFalse(nativeMerge, releasev1alpha1.BranchExistCondition, "", clusterv1.ConditionSeverityInfo, "")
+	conditions.MarkFalse(nativeMerge, releasev1alpha1.NativeMergeRequestCondition, "", clusterv1.ConditionSeverityInfo, "")
+
 	sourceBranch, branchExist, err := r.App.GitClient.GetBranch(nativeMerge.Spec.ProjectID, nativeMerge.Spec.SourceBranch)
 	if err != nil {
 		conditions.MarkFalse(nativeMerge, releasev1alpha1.BranchExistCondition, releasev1alpha1.BranchExistReason,
@@ -151,7 +154,7 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 
 	switch {
 	case mr.State == "merged", mr.State == "closed":
-		conditions.MarkTrue(nativeMerge, releasev1alpha1.AllBranchMergedCondition)
+		conditions.MarkTrue(nativeMerge, releasev1alpha1.NativeMergeRequestCondition)
 		return ctrl.Result{}, nil
 	//lint:ignore
 	case mr.MergeStatus == "can_be_merged", mr.DetailedMergeStatus == "mergeable":
@@ -211,9 +214,13 @@ func (r *NativeMergeRequestReconciler) reconcileDelete(ctx context.Context, nati
 func patchNativeMerge(ctx context.Context, patchHelper *patch.Helper, nativeMerge *releasev1alpha1.NativeMergeRequest, options ...patch.Option) error {
 	// Always update the readyCondition by summarizing the state of other conditions.
 	applicableConditions := []clusterv1.ConditionType{
-		releasev1alpha1.BranchExistCondition,
 		releasev1alpha1.NativeMergeRequestCondition,
-		releasev1alpha1.BranchCommitCondition,
+		releasev1alpha1.BranchExistCondition,
+	}
+
+	if nativeMerge.Spec.CheckSourceBranchMessage != "" {
+		applicableConditions = append(applicableConditions, releasev1alpha1.BranchCommitCondition)
+
 	}
 
 	conditions.SetSummary(nativeMerge,

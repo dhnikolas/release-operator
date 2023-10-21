@@ -55,3 +55,8 @@ type BranchStatus struct {
 	MergeRequestName string  `json:"mergeRequestName,omitempty"`
 	FailureMessage   *string `json:"failureMessage,omitempty"`
 }
+
+type ConflictState struct {
+	RecreatedBuildBranch bool         `json:"recreatedBuildBranch,omitempty"`
+	ResolveBranch        BranchStatus `json:"resolveBranch,omitempty"`
+}
