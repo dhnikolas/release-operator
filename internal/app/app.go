@@ -1,10 +1,11 @@
 package app
 
 import (
-	"github.com/dhnikolas/release-operator/pkg/clients/gitclient"
-	"go.uber.org/zap"
 	"net/http"
 	"os"
+
+	"github.com/dhnikolas/release-operator/pkg/clients/gitclient"
+	"go.uber.org/zap"
 )
 
 type App struct {
@@ -27,14 +28,6 @@ func New() (*App, error) {
 	var config Config
 	config.Service.GitlabToken = os.Getenv("GITLAB_TOKEN")
 	config.Service.GitlabURL = os.Getenv("GITLAB_HOST")
-	//if err := configurator.ReadConfig(&config, consul.Src(), vault.Src()); err != nil {
-	//	return nil, err
-	//}
-
-	//httpClient, err := httpclient.NewClient(&httpclient.ClientOptions{Insecure: true})
-	//if err != nil {
-	//	return nil, err
-	//}
 
 	gitlabConfig := &gitclient.Config{
 		BaseURL:    config.Service.GitlabURL,

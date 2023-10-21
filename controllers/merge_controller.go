@@ -20,11 +20,13 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/blang/semver"
+	releasev1alpha1 "github.com/dhnikolas/release-operator/api/v1alpha1"
+	"github.com/dhnikolas/release-operator/internal/app"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,17 +35,16 @@ import (
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	releasev1alpha1 "github.com/dhnikolas/release-operator/api/v1alpha1"
-	"github.com/dhnikolas/release-operator/internal/app"
-	"github.com/blang/semver"
 )
 
-const OkCommitMessage = "okok"
-const MainBranchName = "main"
+const (
+	OkCommitMessage = "okok"
+	MainBranchName  = "main"
+)
 
 // MergeReconciler reconciles a Merge object.
 type MergeReconciler struct {
@@ -238,7 +239,7 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 		logger.Info("Conflict resolved " + projectPID)
 	}
 
-	tagCreated, err := r.createTag(ctx, merge)
+	tagCreated, err := r.createTag(merge)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -366,21 +367,12 @@ func (r *MergeReconciler) deleteBranchesNativeMR(ctx context.Context, merge *rel
 	return nil
 }
 
-func (r *MergeReconciler) setNewResolveBranch(merge *releasev1alpha1.Merge, name, id string) {
-	for i := range merge.Status.Branches {
-		b := &merge.Status.Branches[i]
-		b.MergeRequestName = name
-		b.MergeRequestID = id
-	}
-}
-
 func (r *MergeReconciler) getOrCreateNativeMR(
 	ctx context.Context,
 	name string,
 	merge *releasev1alpha1.Merge,
 	spec releasev1alpha1.NativeMergeRequestSpec,
 ) (*releasev1alpha1.NativeMergeRequest, error) {
-
 	logger := log.FromContext(ctx)
 	nmr := new(releasev1alpha1.NativeMergeRequest)
 	nmr.Name = name
@@ -415,7 +407,7 @@ func (r *MergeReconciler) getOrCreateNativeMR(
 	return newNmr, nil
 }
 
-func (r *MergeReconciler) createTag(ctx context.Context, merge *releasev1alpha1.Merge) (bool, error) {
+func (r *MergeReconciler) createTag(merge *releasev1alpha1.Merge) (bool, error) {
 	projectPID := merge.Status.ProjectPID
 	buildName := merge.Labels[releasev1alpha1.BuildNameLabel]
 
@@ -443,7 +435,7 @@ func (r *MergeReconciler) createTag(ctx context.Context, merge *releasev1alpha1.
 		return false, nil
 	}
 
-	err = r.createFinalTag(ctx, merge)
+	err = r.createFinalTag(merge)
 	if err != nil {
 		conditions.MarkFalse(merge, releasev1alpha1.TagCondition, releasev1alpha1.TagReason,
 			clusterv1.ConditionSeverityError,
@@ -509,7 +501,8 @@ func (r *MergeReconciler) deleteFinalMRIfExist(ctx context.Context, merge *relea
 
 	return nil
 }
-func (r *MergeReconciler) createFinalTag(ctx context.Context, merge *releasev1alpha1.Merge) error {
+
+func (r *MergeReconciler) createFinalTag(merge *releasev1alpha1.Merge) error {
 	buildName := merge.Labels[releasev1alpha1.BuildNameLabel]
 	baseTag := "v0.0.1"
 	projectPID := merge.Status.ProjectPID

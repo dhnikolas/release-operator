@@ -28,7 +28,7 @@ const (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// NativeMergeRequestSpec defines the desired state of NativeMergeRequest
+// NativeMergeRequestSpec defines the desired state of NativeMergeRequest.
 type NativeMergeRequestSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -43,7 +43,7 @@ type NativeMergeRequestSpec struct {
 	AutoAccept               bool     `json:"autoAccept,omitempty"`
 }
 
-// NativeMergeRequestStatus defines the observed state of NativeMergeRequest
+// NativeMergeRequestStatus defines the observed state of NativeMergeRequest.
 type NativeMergeRequestStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -58,7 +58,7 @@ type NativeMergeRequestStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// NativeMergeRequest is the Schema for the nativemergerequests API
+// NativeMergeRequest is the Schema for the nativemergerequests API.
 type NativeMergeRequest struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -69,7 +69,7 @@ type NativeMergeRequest struct {
 
 //+kubebuilder:object:root=true
 
-// NativeMergeRequestList contains a list of NativeMergeRequest
+// NativeMergeRequestList contains a list of NativeMergeRequest.
 type NativeMergeRequestList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

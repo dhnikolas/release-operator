@@ -18,27 +18,26 @@ package controllers
 
 import (
 	"context"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
 	"fmt"
+	"strings"
+	"time"
+
 	releasev1alpha1 "github.com/dhnikolas/release-operator/api/v1alpha1"
 	"github.com/dhnikolas/release-operator/internal/app"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/cluster-api/util/patch"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"strings"
-	"time"
 )
 
-// NativeMergeRequestReconciler reconciles a NativeMergeRequest object
+// NativeMergeRequestReconciler reconciles a NativeMergeRequest object.
 type NativeMergeRequestReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -113,7 +112,7 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 	if err != nil {
 		conditions.MarkFalse(nativeMerge, releasev1alpha1.BranchExistCondition, releasev1alpha1.BranchExistReason,
 			clusterv1.ConditionSeverityError,
-			"Get source branch branch error: URL %s %s", nativeMerge.Spec.SourceBranch, err)
+			"Get source branch error: URL %s %s", nativeMerge.Spec.SourceBranch, err)
 		return ctrl.Result{Requeue: true}, err
 	}
 	if !branchExist {
@@ -132,7 +131,6 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 			return ctrl.Result{RequeueAfter: time.Second * 3}, err
 		}
 		conditions.MarkTrue(nativeMerge, releasev1alpha1.BranchCommitCondition)
-
 	}
 
 	mr, err := r.App.GitClient.GetOrCreateMR(
@@ -156,7 +154,8 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 	case mr.State == "merged", mr.State == "closed":
 		conditions.MarkTrue(nativeMerge, releasev1alpha1.NativeMergeRequestCondition)
 		return ctrl.Result{}, nil
-	//lint:ignore
+
+	//nolint:golint
 	case mr.MergeStatus == "can_be_merged", mr.DetailedMergeStatus == "mergeable":
 		err := r.App.GitClient.AcceptMR(nativeMerge.Spec.ProjectID, mr.IID)
 		if err != nil {
@@ -170,7 +169,7 @@ func (r *NativeMergeRequestReconciler) reconcileNormal(ctx context.Context, nati
 		}
 		nativeMerge.Status.Ready = true
 
-	//lint:ignore
+	//nolint:golint
 	case mr.MergeStatus == "cannot_be_merged", mr.DetailedMergeStatus == "broken_status":
 		nativeMerge.Status.HasConflict = true
 		err := r.App.GitClient.RemoveMR(nativeMerge.Spec.ProjectID, mr.IID)
@@ -220,7 +219,6 @@ func patchNativeMerge(ctx context.Context, patchHelper *patch.Helper, nativeMerg
 
 	if nativeMerge.Spec.CheckSourceBranchMessage != "" {
 		applicableConditions = append(applicableConditions, releasev1alpha1.BranchCommitCondition)
-
 	}
 
 	conditions.SetSummary(nativeMerge,

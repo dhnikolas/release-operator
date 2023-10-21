@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"path"
 
+	releasev1alpha1 "github.com/dhnikolas/release-operator/api/v1alpha1"
+	"github.com/dhnikolas/release-operator/internal/app"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,9 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	releasev1alpha1 "github.com/dhnikolas/release-operator/api/v1alpha1"
-	"github.com/dhnikolas/release-operator/internal/app"
 )
 
 const (

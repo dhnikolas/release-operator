@@ -135,6 +135,7 @@ func (c *Client) GetOrCreateBranch(pid string, branchName string) error {
 
 	return nil
 }
+
 func (c *Client) GetOrCreateTag(pid string, name, branchName string) (*gitlab.Tag, error) {
 	tag, exist, err := c.GetTag(pid, name)
 	if err != nil {
