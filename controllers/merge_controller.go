@@ -166,7 +166,13 @@ func (r *MergeReconciler) reconcileNormal(ctx context.Context, merge *releasev1a
 				"Recreate branch error: URL %s %s", merge.Spec.Repo.URL, err)
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.deleteBranchesNativeMR(ctx, merge)
+		err = r.deleteBranchesNativeMR(ctx, merge)
+		if err != nil {
+			conditions.MarkFalse(merge, releasev1alpha1.ReleaseBranchReadyCondition, releasev1alpha1.ReleaseBranchReason,
+				clusterv1.ConditionSeverityError,
+				"Cannot delete old branches error: URL %s %s", merge.Spec.Repo.URL, err)
+			return ctrl.Result{Requeue: true}, err
+		}
 		merge.Status.BuildBranch = buildName
 		add = branches
 		merge.Status.Branches = make([]releasev1alpha1.BranchStatus, 0)
@@ -296,6 +302,13 @@ func (r *MergeReconciler) reconcileConflict(ctx context.Context, merge *releasev
 	merge.Status.ConflictState.ResolveBranch.IsMerged = nmr.Status.Ready
 	merge.Status.ConflictState.ResolveBranch.Processed = conditions.IsTrue(nmr, clusterv1.ReadyCondition)
 
+	if merge.Status.ConflictState.ResolveBranch.IsConflict {
+		conditions.MarkFalse(merge, releasev1alpha1.ResolveConflictBranchesReadyCondition, releasev1alpha1.ResolveConflictBranchesReason,
+			clusterv1.ConditionSeverityWarning,
+			"Conflict for resolve branch: URL %s %s", merge.Spec.Repo.URL, err)
+		return false, nil
+	}
+
 	if !merge.Status.ConflictState.ResolveBranch.IsMerged {
 		conditions.MarkFalse(merge, releasev1alpha1.ResolveConflictBranchesReadyCondition, releasev1alpha1.ResolveConflictBranchesReason,
 			clusterv1.ConditionSeverityWarning,
@@ -336,16 +349,21 @@ func (r *MergeReconciler) getResolveBranchName(merge *releasev1alpha1.Merge) str
 	return "c_" + strings.Join(resolveBranchNameSlice, "_")
 }
 
-func (r *MergeReconciler) deleteBranchesNativeMR(ctx context.Context, merge *releasev1alpha1.Merge) {
+func (r *MergeReconciler) deleteBranchesNativeMR(ctx context.Context, merge *releasev1alpha1.Merge) error {
 	for i := range merge.Status.Branches {
 		b := &merge.Status.Branches[i]
 		if b.MergeRequestName == "" {
 			continue
 		}
-		r.deleteNativeMR(ctx, merge, b.MergeRequestName)
+		err := r.deleteNativeMR(ctx, merge, b.MergeRequestName)
+		if err != nil {
+			return err
+		}
 		b.MergeRequestName = ""
 		b.MergeRequestID = ""
 	}
+
+	return nil
 }
 
 func (r *MergeReconciler) setNewResolveBranch(merge *releasev1alpha1.Merge, name, id string) {
@@ -447,7 +465,7 @@ func (r *MergeReconciler) createFinalMR(ctx context.Context, merge *releasev1alp
 		SourceBranch: buildName,
 		TargetBranch: MainBranchName,
 		Labels:       []string{"release-operator"},
-		AutoAccept:   false,
+		AutoAccept:   merge.Spec.Repo.AcceptFinalMR,
 	}
 	nmr, err := r.getOrCreateNativeMR(ctx, merge.Status.FinalMR, merge, nmrSpec)
 	if err != nil {
@@ -456,7 +474,21 @@ func (r *MergeReconciler) createFinalMR(ctx context.Context, merge *releasev1alp
 			"Create final MR error: URL %s %s", merge.Spec.Repo.URL, err)
 		return err
 	}
+	nmrPatchHelper, err := patch.NewHelper(nmr, r.Client)
+	if err != nil {
+		return err
+	}
 	merge.Status.FinalMR = nmr.Name
+
+	nmr.Spec.AutoAccept = merge.Spec.Repo.AcceptFinalMR
+
+	err = nmrPatchHelper.Patch(ctx, nmr)
+	if err != nil {
+		conditions.MarkFalse(merge, releasev1alpha1.FinalMRCondition, releasev1alpha1.FinalMRReason,
+			clusterv1.ConditionSeverityError,
+			"Update final MR error: URL %s %s", merge.Spec.Repo.URL, err)
+		return err
+	}
 	conditions.MarkTrue(merge, releasev1alpha1.FinalMRCondition)
 
 	return nil

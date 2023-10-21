@@ -6,8 +6,9 @@ const (
 
 type Repo struct {
 	// +kubebuilder:validation:Pattern=`^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})\/([\/\w\.-]){1,}\/?$`
-	URL      string   `json:"URL"`
-	Branches []Branch `json:"branches"`
+	URL           string   `json:"URL"`
+	AcceptFinalMR bool     `json:"acceptFinalMR,omitempty"`
+	Branches      []Branch `json:"branches"`
 }
 
 type Branch struct {

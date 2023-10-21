@@ -44,6 +44,8 @@ spec:
                     URL:
                       pattern: ^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})\/([\/\w\.-]){1,}\/?$
                       type: string
+                    acceptFinalMR:
+                      type: boolean
                     branches:
                       items:
                         properties:
